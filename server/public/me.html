@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>My Boba Bash</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/static/icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/me.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/"><img src="/static/icon.png" alt="" width="28" height="19"> <span id="eventName">Boba Bash</span></a>
+    <span class="who" id="who" hidden></span>
+  </header>
+
+  <main>
+    <!-- ===================== auth ===================== -->
+    <section id="auth" hidden>
+      <img class="logo" src="/static/boba-bash.webp" alt="Hack Club's Boba Bash" width="170" height="118">
+
+      <form id="login" class="panel" data-view="login">
+        <h1>Log in</h1>
+        <label class="f"><span>Email or card number</span><input name="login" autocomplete="username" required></label>
+        <label class="f"><span>Password</span><input name="password" type="password" autocomplete="current-password" required></label>
+        <p class="err" role="alert"></p>
+        <button class="btn" type="submit">Log in</button>
+        <div class="alt"><a href="#setup">First time? Set up</a><a href="#forgot">Forgot password</a></div>
+      </form>
+
+      <form id="setup" class="panel" data-view="setup" hidden>
+        <h1>Set up your account</h1>
+        <div class="seg" id="setupMode"><button type="button" data-sm="card" class="on">I have a card</button><button type="button" data-sm="email">No card yet</button></div>
+        <p class="sub" id="setupHint">Card number and PIN are on your card.</p>
+        <div class="row" data-only="card">
+          <label class="f"><span>Card no.</span><input name="card" inputmode="numeric" autocomplete="off" maxlength="5"></label>
+          <label class="f"><span>PIN</span><input name="pin" inputmode="numeric" autocomplete="off" maxlength="4"></label>
+        </div>
+        <label class="f" data-only="signup" hidden><span>Your name</span><input name="name" autocomplete="name" maxlength="120"></label>
+        <label class="f"><span>Email</span><input name="email" type="email" autocomplete="email" required></label>
+        <label class="f"><span>Password <small>(8+ characters)</small></span><input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+        <p class="err" role="alert"></p>
+        <button class="btn" type="submit">Send me a code</button>
+        <div class="alt"><a href="#login">I already set up</a></div>
+      </form>
+
+      <form id="setupCode" class="panel" data-view="setupCode" hidden>
+        <h1>Check your mail</h1>
+        <p class="sub">Code sent to <b class="to"></b>. It works for 10 minutes.</p>
+        <label class="f"><span>6-digit code</span><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></label>
+        <p class="err" role="alert"></p>
+        <button class="btn" type="submit">Finish setup</button>
+        <div class="alt"><a href="#setup">Back</a></div>
+      </form>
+
+      <div id="forgot" class="panel" data-view="forgot" hidden>
+        <h1>Reset your password</h1>
+        <div class="seg"><button type="button" data-fm="email" class="on">By email</button><button type="button" data-fm="pin">With my card</button></div>
+        <form id="forgotEmail">
+          <label class="f"><span>Your email</span><input name="email" type="email" autocomplete="email" required></label>
+          <p class="err" role="alert"></p>
+          <button class="btn" type="submit">Send me a code</button>
+        </form>
+        <form id="forgotEmailCode" hidden>
+          <p class="sub">If that email has an account, a code is on its way.</p>
+          <label class="f"><span>6-digit code</span><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></label>
+          <label class="f"><span>New password</span><input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <p class="err" role="alert"></p>
+          <button class="btn" type="submit">Save and log in</button>
+        </form>
+        <form id="forgotPin" hidden>
+          <div class="row">
+            <label class="f"><span>Card no.</span><input name="card" inputmode="numeric" maxlength="5" required></label>
+            <label class="f"><span>PIN</span><input name="pin" inputmode="numeric" maxlength="4" required></label>
+          </div>
+          <label class="f"><span>New password</span><input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <p class="err" role="alert"></p>
+          <button class="btn" type="submit">Save and log in</button>
+        </form>
+        <div class="alt"><a href="#login">Back to log in</a></div>
+      </div>
+    </section>
+
+    <!-- ===================== dashboard ===================== -->
+    <section id="dash" hidden>
+      <div class="head">
+        <div>
+          <h1 id="hello"></h1>
+          <p class="sub" id="meta"></p>
+        </div>
+      </div>
+      <nav class="tabs" id="tabs">
+        <button data-tab="home" class="on">Home</button>
+        <button data-tab="card">Card</button>
+        <button data-tab="profile">Profile</button>
+        <button data-tab="team">Team</button>
+        <button data-tab="schedule">Schedule</button>
+        <button data-tab="inbox">Inbox <b class="badge" id="unread" hidden></b></button>
+        <button data-tab="help">Help</button>
+        <button data-tab="guide">Guide</button>
+        <button data-tab="account">Account</button>
+      </nav>
+      <p class="banner" id="announce" hidden></p>
+      <div id="urgent"></div>
+
+      <!-- home -->
+      <div data-pane="home">
+        <div class="panel split">
+          <div><span class="k">Right now</span><div id="hNow"></div></div>
+          <div><span class="k">Up next</span><div id="hNext"></div></div>
+        </div>
+        <div class="panel" id="hCard"></div>
+        <div class="panel" id="hTeam"></div>
+        <div class="panel split">
+          <div><span class="k">Points</span><p class="bignum" id="hPoints">0</p></div>
+          <div><span class="k">Collected</span><div id="hItems" class="chips"></div></div>
+        </div>
+        <div class="panel" id="hInbox"></div>
+      </div>
+
+      <!-- card -->
+      <div data-pane="card" hidden>
+        <div id="noCard" class="panel" hidden>
+          <span class="k">No card yet</span>
+          <p>Grab one at the desk. Everything else here works without it.</p>
+        </div>
+        <div id="hasCard">
+          <div class="panel now">
+            <span class="k">A tap opens</span>
+            <a class="dest" id="dest" target="_blank" rel="noopener"></a>
+            <span class="why" id="why"></span>
+          </div>
+          <p class="lock" id="lock" hidden></p>
+          <div class="panel choose" id="choose">
+            <span class="k">Where your card goes</span>
+            <div class="opt" data-opt="project">
+              <div class="grow"><b>My project</b><a class="u" id="projUrl" target="_blank" rel="noopener"></a></div>
+              <button class="btn sm" data-dest="project" type="button">Point here</button>
+            </div>
+            <div class="opt" data-opt="profile">
+              <div class="grow"><b>My profile page</b><span class="u" id="profUrl"></span></div>
+              <button class="btn sm" data-dest="profile" type="button">Point here</button>
+            </div>
+            <form class="opt" data-opt="custom" id="customForm">
+              <div class="grow"><b>Any other link</b><input name="url" placeholder="yoursite.com" inputmode="url" autocomplete="url"></div>
+              <button class="btn sm" type="submit">Point here</button>
+            </form>
+            <p class="err" role="alert"></p>
+          </div>
+          <form class="panel" id="splashForm">
+            <span class="k">While it loads</span>
+            <p class="sub">A short line under the Boba Bash logo when someone taps your card.</p>
+            <div class="inline"><input name="msg" maxlength="60" placeholder="Hey, I'm Riya. I build robots."><button class="btn sm" type="submit">Save</button></div>
+            <p class="err" role="alert"></p>
+          </form>
+          <div id="cardList"></div>
+          <div class="panel">
+            <span class="k">Taps</span>
+            <div class="big"><b id="sTotal">0</b><span>all time</span></div>
+            <div class="bars" id="sDays"></div>
+            <div class="two">
+              <div><span class="k">Phones</span><div class="list" id="sDevices"></div></div>
+              <div><span class="k">Countries</span><div class="list" id="sCountries"></div></div>
+            </div>
+          </div>
+          <div class="panel">
+            <span class="k">Your project page</span>
+            <p id="prLine"></p>
+            <p class="sub" id="howTo"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- profile -->
+      <div data-pane="profile" hidden>
+        <form class="panel" id="profileForm">
+          <div class="avrow">
+            <div class="av" id="avPreview"></div>
+            <div class="inline wrap">
+              <label class="btn sm ghost">Upload photo<input type="file" id="avFile" accept="image/png,image/jpeg,image/webp,image/gif" hidden></label>
+              <button class="btn sm ghost" id="avRemove" type="button">Remove</button>
+            </div>
+          </div>
+          <div class="row">
+            <label class="f"><span>Name</span><input name="name" maxlength="60"></label>
+            <label class="f"><span>One-liner</span><input name="tagline" maxlength="80" placeholder="Student · builds games"></label>
+          </div>
+          <label class="f"><span>Bio</span><textarea name="bio" maxlength="600" rows="4" placeholder="A few lines about you."></textarea></label>
+          <span class="k">Theme</span>
+          <div class="themes" id="themes"></div>
+          <div class="inline wrap">
+            <label class="f"><span>Accent colour</span><input type="color" name="accent" value="#f2c14e"></label>
+            <label class="check"><input type="checkbox" name="useAccent"> Use my own accent</label>
+          </div>
+          <span class="k">Links</span>
+          <label class="check"><input type="checkbox" name="show_project" checked> Put a button to my Boba Bash project first</label>
+          <div id="links" class="links"></div>
+          <button class="btn sm ghost" id="addLink" type="button">Add a link</button>
+          <span class="k">Socials <small>(just the username)</small></span>
+          <div class="socials" id="socials"></div>
+          <span class="k">Sharing</span>
+          <label class="check"><input type="checkbox" name="c_email"> "Save my contact" button includes my email</label>
+          <label class="check"><input type="checkbox" name="c_phone"> "Save my contact" button includes my phone</label>
+          <label class="check"><input type="checkbox" name="wall" checked> Show my first name on the event screen when my card is tapped</label>
+          <p class="err" role="alert"></p>
+          <div class="inline wrap">
+            <button class="btn" type="submit">Save profile</button>
+            <a class="btn ghost" id="openProfile" target="_blank" rel="noopener">Open preview</a>
+          </div>
+          <p class="sub" id="profNote"></p>
+        </form>
+        <div class="panel framewrap"><iframe id="profileFrame" title="Profile preview" loading="lazy"></iframe></div>
+      </div>
+
+      <!-- team -->
+      <div data-pane="team" hidden><div id="teamBox"></div></div>
+
+      <!-- schedule -->
+      <div data-pane="schedule" hidden><div class="panel" id="schedBox"></div></div>
+
+      <!-- inbox -->
+      <div data-pane="inbox" hidden><div id="inboxBox"></div></div>
+
+      <!-- help -->
+      <div data-pane="help" hidden>
+        <form class="panel" id="helpForm">
+          <span class="k">Ask an organiser</span>
+          <div class="kinds" id="helpKinds"></div>
+          <label class="f"><span>What do you need? Say where you are.</span><textarea name="message" rows="3" maxlength="500" placeholder="My laptop won't connect to the wifi. Table 4."></textarea></label>
+          <p class="err" role="alert"></p>
+          <button class="btn" type="submit">Send</button>
+          <p class="sub" id="helpClosed" hidden>The help desk is closed right now. Find an organiser.</p>
+        </form>
+        <div id="helpList"></div>
+      </div>
+
+      <!-- guide -->
+      <div data-pane="guide" hidden><div class="panel md" id="guideBody"></div></div>
+
+      <!-- account -->
+      <div data-pane="account" hidden>
+        <div class="panel">
+          <span class="k">You</span>
+          <p id="accInfo"></p>
+          <p class="sub">To change your email or name, ask an organiser.</p>
+        </div>
+        <form class="panel" id="pwForm">
+          <span class="k">Change password</span>
+          <label class="f"><span>Current password</span><input name="current" type="password" autocomplete="current-password" required></label>
+          <label class="f"><span>New password</span><input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <p class="err" role="alert"></p>
+          <button class="btn sm" type="submit">Change password</button>
+        </form>
+        <div class="panel inline wrap">
+          <button class="btn sm ghost" id="logout" type="button">Log out</button>
+          <button class="btn sm ghost" id="logoutAll" type="button">Log out everywhere</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="/static/qrcode.js"></script>
+  <script src="/static/md.js"></script>
+  <script src="/static/me.js"></script>
+</body>
+</html>

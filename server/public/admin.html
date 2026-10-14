@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Cards HQ</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/static/icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/admin.css">
+</head>
+<body>
+  <div id="login" class="login" hidden>
+    <form id="loginForm" class="login-box">
+      <img src="/static/boba-bash.webp" alt="" width="120" height="83">
+      <h1>Cards HQ</h1>
+      <p class="muted">Organisers only.</p>
+      <input name="email" type="email" placeholder="Email" autocomplete="username" required>
+      <input name="password" type="password" placeholder="Password" autocomplete="current-password" required>
+      <p class="err"></p>
+      <button class="btn primary" type="submit">Log in</button>
+      <p class="muted small">No account? An admin makes one with <code>cards admin add</code> on the server, or under Organisers.</p>
+    </form>
+  </div>
+
+  <div id="app" class="app" hidden>
+    <aside class="side">
+      <div class="brand"><img src="/static/icon.png" alt="" width="26" height="18"> Cards HQ</div>
+      <nav id="nav">
+        <span class="grp">Event</span>
+        <button data-view="desk">Desk</button>
+        <button data-view="people">People</button>
+        <button data-view="teams">Teams</button>
+        <button data-view="notify">Notify</button>
+        <button data-view="schedule">Schedule</button>
+        <button data-view="help">Help desk <b class="nbadge" id="helpBadge" hidden></b></button>
+        <button data-view="handouts">Handouts</button>
+        <span class="grp">Cards</span>
+        <button data-view="cards">Cards</button>
+        <button data-view="control" data-admin>Control</button>
+        <button data-view="print" data-admin>Print &amp; blanks</button>
+        <span class="grp">Sites</span>
+        <button data-view="prs">Pull requests</button>
+        <button data-view="guide">Instructions</button>
+        <span class="grp">Data</span>
+        <button data-view="stats">Stats</button>
+        <button data-view="log">Activity</button>
+        <span class="grp">Setup</span>
+        <button data-view="admins">Organisers</button>
+        <button data-view="setup" data-admin>Setup</button>
+        <a class="navlink" href="/wall" target="_blank" rel="noopener">Open the wall ↗</a>
+      </nav>
+      <div class="side-foot">
+        <div class="status" id="sideStatus"></div>
+        <div class="me"><span id="meEmail"></span><button class="btn ghost sm" id="logout">Log out</button></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="gsearch">
+          <input id="gsearch" placeholder="Find anyone: name, email, phone, GitHub, card number" autocomplete="off">
+          <div class="gresults" id="gresults" hidden></div>
+        </div>
+      </div>
+      <div class="banner" id="overrideBanner" hidden></div>
+
+      <!-- ===== desk ===== -->
+      <section data-page="desk" hidden>
+        <div class="head"><h2>Desk</h2><span class="muted small">Register someone, hand them a card, check them in.</span></div>
+        <div class="desk">
+          <form id="reg" class="block reg">
+            <div class="grid two">
+              <label class="field span2"><span>Name *</span><input name="name" required autocomplete="off"></label>
+              <label class="field"><span>Email</span><input name="email" type="email" autocomplete="off"></label>
+              <label class="field"><span>Phone</span><input name="phone" autocomplete="off"></label>
+              <label class="field"><span>GitHub</span><input name="github" autocomplete="off" placeholder="username"></label>
+              <label class="field"><span>Team</span><select name="team_id" id="regTeam"></select></label>
+              <label class="field span2"><span>Tags</span><input name="tags" autocomplete="off" placeholder="attendee"></label>
+              <div class="span2 quicktags" id="quickTags"></div>
+              <label class="field span2"><span>Note (organisers only)</span><input name="note" autocomplete="off"></label>
+            </div>
+            <div class="cardpick">
+              <span class="lbl">Card</span>
+              <label class="check"><input type="radio" name="cardmode" value="next" checked> Next card <b id="nextCard"></b></label>
+              <label class="check"><input type="radio" name="cardmode" value="number"> Card no. <input name="card" inputmode="numeric" class="w-id" autocomplete="off"></label>
+              <label class="check"><input type="radio" name="cardmode" value="none"> No card</label>
+            </div>
+            <div class="inline wrap opts">
+              <label class="check"><input type="checkbox" name="checkin" checked> Check in now</label>
+              <label class="check"><input type="checkbox" name="new_pin"> New PIN for a pre-printed card</label>
+              <label class="check" data-admin><input type="checkbox" name="allow_dupes"> Allow duplicate phone / GitHub</label>
+            </div>
+            <div class="inline wrap opts" id="regItems"></div>
+            <p class="err"></p>
+            <div class="actions"><button class="btn accent big" type="submit">Register</button><span class="muted small" id="regHint"></span></div>
+          </form>
+          <div>
+            <div class="block result" id="regResult" hidden>
+              <span class="muted small" id="rName"></span>
+              <div class="res-card" id="rCardBox">
+                <div><span class="lbl">Card</span><b id="rId"></b></div>
+                <div><span class="lbl">PIN</span><b id="rPin"></b></div>
+              </div>
+              <div class="res-qr" id="rQr"></div>
+              <p class="mono" id="rUrl"></p>
+              <p class="err" id="rErr"></p>
+              <div class="actions"><button class="btn" id="rPrint" type="button">Print card</button><button class="btn" id="rOpen" type="button">Open person</button><button class="btn primary" id="rNext" type="button">Next person</button></div>
+              <p class="muted small" id="rTell"></p>
+            </div>
+            <div class="block">
+              <h3>Quick check-in</h3>
+              <input id="ciSearch" placeholder="Name, email, phone or card number" autocomplete="off">
+              <div class="list flat" id="ciList"></div>
+            </div>
+          </div>
+        </div>
+        <h3 class="sub-h">Just registered</h3>
+        <div class="list" id="recent"></div>
+      </section>
+
+      <!-- ===== people ===== -->
+      <section data-page="people" hidden>
+        <div class="head"><h2>People</h2><a class="btn sm" href="/api/admin/export.csv" download>CSV</a><button class="btn sm primary" data-go="desk">Add person</button></div>
+        <div class="bar">
+          <input id="pSearch" placeholder="Search" class="search">
+          <div class="seg" id="pFilter">
+            <button data-f="all" class="on">All</button>
+            <button data-f="here">Here</button>
+            <button data-f="away">Not here</button>
+            <button data-f="nocard">No card</button>
+            <button data-f="unclaimed">Not set up</button>
+            <button data-f="help">Needs help</button>
+            <button data-f="disabled">Disabled</button>
+          </div>
+          <select id="pTeam" class="w-tag"></select>
+          <select id="pTag" class="w-tag"></select>
+          <span class="muted count" id="pCount"></span>
+        </div>
+        <div class="bulk" id="pBulk" hidden>
+          <b id="pBulkCount"></b>
+          <select id="pBulkAction"></select>
+          <span id="pBulkValue"></span>
+          <button class="btn primary sm" id="pBulkGo">Apply</button>
+          <button class="btn ghost sm" id="pBulkNotify">Notify them</button>
+          <button class="btn ghost sm" id="pBulkClear">Clear</button>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="pTable">
+            <thead><tr><th class="cb"><input type="checkbox" id="pAll"></th><th>#</th><th>Name</th><th>Card</th><th>Team</th><th>Tags</th><th>Status</th><th class="r">Pts</th><th class="r">Taps</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <p class="empty" id="pEmpty" hidden>Nobody yet. Register someone at the Desk.</p>
+        </div>
+      </section>
+
+      <!-- ===== teams ===== -->
+      <section data-page="teams" hidden>
+        <div class="head"><h2>Teams</h2></div>
+        <div class="grid two">
+          <form class="block" id="teamNew" data-admin>
+            <h3>New team</h3>
+            <div class="grid two">
+              <label class="field"><span>Name</span><input name="name" required></label>
+              <label class="field"><span>Colour</span><input name="color" type="color" value="#ec3750"></label>
+              <label class="field"><span>Table / room</span><input name="place"></label>
+              <label class="field"><span>Note for members</span><input name="note"></label>
+            </div>
+            <div class="actions"><button class="btn primary" type="submit">Make team</button></div>
+          </form>
+          <form class="block" id="teamAuto" data-admin>
+            <h3>Split people into teams</h3>
+            <div class="grid two">
+              <label class="field"><span>Who</span><select name="scope" id="autoScope"></select></label>
+              <label class="field"><span>Name prefix</span><input name="prefix" value="Team"></label>
+              <label class="field"><span>People per team</span><input name="size" type="number" min="1" value="4"></label>
+              <label class="field"><span>or number of teams</span><input name="count" type="number" min="1" placeholder="optional"></label>
+            </div>
+            <p class="muted small">Random. People already on a team stay put.</p>
+            <div class="actions"><button class="btn" type="submit">Split</button></div>
+          </form>
+        </div>
+        <div id="teamList"></div>
+      </section>
+
+      <!-- ===== notify ===== -->
+      <section data-page="notify" hidden>
+        <div class="head"><h2>Notify</h2><span class="muted small">Shows in their inbox, urgent ones pin to the top of every screen. Optional email copy.</span></div>
+        <form class="block" id="nForm" data-admin>
+          <div class="grid two">
+            <label class="field span2"><span>Title</span><input name="title" maxlength="140" required placeholder="Dinner is served in the main hall"></label>
+            <label class="field span2"><span>Message</span><textarea name="body" maxlength="3000" rows="4"></textarea></label>
+            <label class="field"><span>Send to</span><select name="target_kind" id="nKind">
+              <option value="all">Everyone</option>
+              <option value="checked_in">Everyone checked in</option>
+              <option value="not_checked_in">Everyone not checked in</option>
+              <option value="team">A team</option>
+              <option value="tag">A tag</option>
+              <option value="people">Specific people</option>
+            </select></label>
+            <label class="field" id="nTargetWrap" hidden><span id="nTargetLabel"></span><select id="nTargetSel"></select></label>
+            <div class="span2" id="nPeopleWrap" hidden>
+              <input id="nPeopleSearch" placeholder="Add people by name, email or card number" autocomplete="off">
+              <div class="gresults inline-results" id="nPeopleResults" hidden></div>
+              <div class="chips" id="nPeople"></div>
+            </div>
+          </div>
+          <div class="inline wrap opts">
+            <label class="check"><input type="checkbox" name="urgent"> Urgent (pinned until they tap "Got it")</label>
+            <label class="check"><input type="checkbox" name="email"> Also email it</label>
+            <span class="muted small" id="nPreview"></span>
+          </div>
+          <p class="err"></p>
+          <div class="actions"><button class="btn accent" type="submit">Send</button></div>
+        </form>
+        <div class="table-wrap">
+          <table class="table" id="nTable">
+            <thead><tr><th>When</th><th>Title</th><th>To</th><th class="r">Reach</th><th class="r">Read</th><th class="r">Emailed</th><th>By</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===== schedule ===== -->
+      <section data-page="schedule" hidden>
+        <div class="head"><h2>Schedule</h2><span class="muted small">Shows on everyone's dashboard and the wall. India time.</span></div>
+        <form class="block" id="sForm" data-admin>
+          <div class="grid sched-form">
+            <label class="field"><span>Day</span><input name="day" type="date" required></label>
+            <label class="field"><span>Starts</span><input name="start" type="time" required></label>
+            <label class="field"><span>Ends</span><input name="end" type="time"></label>
+            <label class="field"><span>What</span><input name="title" required maxlength="120"></label>
+            <label class="field"><span>Where</span><input name="place" maxlength="80"></label>
+            <label class="field"><span>Note</span><input name="note" maxlength="300"></label>
+          </div>
+          <input type="hidden" name="id">
+          <p class="err"></p>
+          <div class="actions"><button class="btn primary" type="submit" id="sSave">Add</button><button class="btn ghost" type="button" id="sCancel" hidden>Cancel edit</button></div>
+        </form>
+        <div id="sList"></div>
+      </section>
+
+      <!-- ===== help ===== -->
+      <section data-page="help" hidden>
+        <div class="head"><h2>Help desk</h2>
+          <div class="seg" id="hFilter"><button data-f="active" class="on">Open</button><button data-f="done">Done</button><button data-f="all">All</button></div>
+          <label class="check" data-admin><input type="checkbox" id="helpOpenToggle"> Accepting requests</label>
+        </div>
+        <div id="hList"></div>
+      </section>
+
+      <!-- ===== handouts ===== -->
+      <section data-page="handouts" hidden>
+        <div class="head"><h2>Handouts</h2><span class="muted small">T-shirts, food, stickers. Tick them off per person.</span></div>
+        <form class="inline wrap block" id="iForm" data-admin><input name="name" placeholder="T-shirt" required><input name="stock" type="number" min="0" placeholder="Stock (optional)" class="w-tag"><button class="btn primary" type="submit">Add item</button></form>
+        <div class="list" id="iList"></div>
+        <div class="block" id="iQueue">
+          <div class="head"><h3>Who hasn't got it yet</h3><select id="iPick" class="w-tag"></select><label class="check"><input type="checkbox" id="iHereOnly" checked> Only people here</label></div>
+          <input id="iSearch" placeholder="Filter by name or card" autocomplete="off">
+          <div class="list flat" id="iMissing"></div>
+        </div>
+      </section>
+
+      <!-- ===== cards ===== -->
+      <section data-page="cards" hidden>
+        <div class="head"><h2>Cards</h2></div>
+        <div class="bar">
+          <input id="cSearch" placeholder="Card number or holder" class="search">
+          <div class="seg" id="cFilter">
+            <button data-f="all" class="on">All</button>
+            <button data-f="held">Held</button>
+            <button data-f="blank">Blank</button>
+            <button data-f="off">Off</button>
+          </div>
+          <span class="muted count" id="cCount"></span>
+        </div>
+        <div class="bulk" id="cBulk" hidden>
+          <b id="cBulkCount"></b>
+          <select id="cBulkAction">
+            <option value="status:active">Switch on</option>
+            <option value="status:disabled">Switch off</option>
+            <option value="lock_mode:locked">Lock links</option>
+            <option value="lock_mode:open">Open links</option>
+            <option value="lock_mode:global">Follow global lock</option>
+            <option value="skip_override:1">Ignore all-cards link</option>
+            <option value="skip_override:0">Follow all-cards link</option>
+            <option value="admin_url">Send to a link</option>
+            <option value="admin_url:">Clear organiser link</option>
+          </select>
+          <input id="cBulkValue" placeholder="https://">
+          <button class="btn primary sm" id="cBulkGo">Apply</button>
+          <button class="btn ghost sm" id="cBulkClear">Clear</button>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="cTable">
+            <thead><tr><th class="cb"><input type="checkbox" id="cAll"></th><th>Card</th><th>Holder</th><th>Status</th><th>A tap opens</th><th>Site</th><th class="r">Taps</th><th>Last tap</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <p class="empty" id="cEmpty" hidden>No cards yet.</p>
+        </div>
+      </section>
+
+      <!-- ===== control ===== -->
+      <section data-page="control" hidden>
+        <h2>Control</h2>
+        <div class="block" id="ctlOverride">
+          <div class="block-h">
+            <div><h3>Send every card to one link</h3><p class="muted">Beats everything. Cards marked "ignore" keep their own link. Leave the times empty to run until you turn it off.</p></div>
+            <label class="switch"><input type="checkbox" name="override_on"><i></i></label>
+          </div>
+          <div class="grid three">
+            <label class="field span3"><span>Link</span><input name="override_url" placeholder="https://bash.hackclub.com/events/50"></label>
+            <label class="field"><span>From</span><input type="datetime-local" name="override_from"></label>
+            <label class="field"><span>Until</span><input type="datetime-local" name="override_until"></label>
+            <div class="self-end"><button class="btn" id="saveOverride">Save</button></div>
+          </div>
+          <p class="muted small" id="overrideState"></p>
+        </div>
+        <div class="block" id="ctlLock">
+          <div class="block-h">
+            <div><h3>Lock owner links</h3><p class="muted">While locked, cards open their project page and owners can't switch. Profiles and splash lines still save.</p></div>
+            <label class="switch"><input type="checkbox" name="lock_on"><i></i></label>
+          </div>
+          <div class="inline"><span class="lbl">Unlock by itself at</span><input type="datetime-local" name="unlock_at" class="w-dt"><button class="btn" id="saveUnlock">Save</button><button class="btn ghost" id="clearUnlock">Clear</button></div>
+          <p class="muted small" id="lockState"></p>
+        </div>
+        <div class="block">
+          <h3>Tag routes</h3>
+          <p class="muted">Every card whose holder has the tag goes to the link. Beats the owner's choice, loses to the all-cards link and per-card overrides.</p>
+          <div class="list" id="tagRoutes"></div>
+          <form class="inline" id="tagRouteForm"><input name="tag" placeholder="volunteer" class="w-tag"><input name="url" placeholder="https://"><button class="btn" type="submit">Add route</button></form>
+        </div>
+        <div class="block">
+          <h3>Messages</h3>
+          <div class="grid two">
+            <label class="field"><span>Announcement (home page + every dashboard)</span><input id="announcement" maxlength="300"></label>
+            <label class="field"><span>Wall subtitle</span><input id="wallNote" maxlength="200" placeholder="Tap a card on any phone"></label>
+          </div>
+          <div class="actions"><button class="btn" id="saveMessages">Save</button></div>
+        </div>
+        <div class="block">
+          <h3>Behaviour</h3>
+          <div class="grid two">
+            <label class="field"><span>Event name</span><input name="event_name" maxlength="80"></label>
+            <label class="field"><span>Splash time (ms, logo before redirect)</span><input name="splash_ms" type="number" min="0" max="15000" step="500"></label>
+            <label class="field span2"><span>Blank cards go to</span><input name="inactive_url" placeholder="Empty shows 'Not live yet'"></label>
+            <label class="check"><input type="checkbox" name="allow_profiles"> Owners can send their card to their profile page</label>
+            <label class="check"><input type="checkbox" name="help_open"> Help desk accepting requests</label>
+            <label class="check span2"><input type="checkbox" name="owner_signup"> Anyone can sign up on /me without being registered at the desk</label>
+          </div>
+          <div class="actions"><button class="btn primary" id="saveBehaviour">Save</button></div>
+        </div>
+      </section>
+
+      <!-- ===== print ===== -->
+      <section data-page="print" hidden>
+        <h2>Print &amp; blanks</h2>
+        <div class="block">
+          <h3>Make blank cards ahead of time</h3>
+          <p class="muted">Optional. The desk makes cards on the spot too. Blank cards get the next numbers and random PINs, shown once.</p>
+          <form class="inline" id="gen"><span class="lbl">How many</span><input name="count" type="number" min="1" max="300" value="10" class="w-id"><button class="btn accent" type="submit">Make</button></form>
+        </div>
+        <div class="block" id="genOut" hidden>
+          <div class="head"><h3 id="genTitle"></h3><button class="btn" id="genCsv">Download CSV</button><button class="btn primary" id="genPrint">Print sheet</button></div>
+          <div class="pins" id="genList"></div>
+        </div>
+        <div class="block">
+          <h3>QR stickers</h3>
+          <p class="muted">No PINs on these.</p>
+          <form class="inline" id="qrForm"><span class="lbl">From</span><input name="from" type="number" min="1" value="1" class="w-id"><span class="lbl">to</span><input name="to" type="number" min="1" value="80" class="w-id"><button class="btn" type="submit">Print QR sheet</button></form>
+        </div>
+      </section>
+
+      <!-- ===== prs ===== -->
+      <section data-page="prs" hidden>
+        <div class="head"><h2>Pull requests</h2><span class="muted small" id="prSync"></span><button class="btn" id="syncPrs">Sync from GitHub</button></div>
+        <div class="table-wrap">
+          <table class="table" id="prTable">
+            <thead><tr><th>PR</th><th>Card</th><th>By</th><th>State</th><th>Title</th><th>Heads up</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <p class="empty" id="prEmpty" hidden>No PRs yet. Hit sync.</p>
+        </div>
+      </section>
+
+      <!-- ===== instructions ===== -->
+      <section data-page="guide" hidden>
+        <div class="head"><h2>Instructions</h2><span class="muted small">Shown on the home page and in everyone's Guide tab.</span><button class="btn primary" id="saveGuide" data-admin>Save</button></div>
+        <div class="editor">
+          <div class="block ed">
+            <div class="ed-tools" data-admin>
+              <label class="btn sm">Upload file<input type="file" id="guideFile" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" hidden></label>
+              <span class="muted small"># heading · **bold** · - list · [link](https://…) · ![image](/files/…)</span>
+            </div>
+            <textarea id="guideText" spellcheck="true" placeholder="## Getting your site live&#10;&#10;1. Fork the sites repo&#10;2. ..."></textarea>
+          </div>
+          <div class="block md" id="guidePreview"></div>
+        </div>
+        <h3 class="sub-h">Files</h3>
+        <div class="list" id="fileList"></div>
+      </section>
+
+      <!-- ===== stats ===== -->
+      <section data-page="stats" hidden>
+        <div class="head"><h2>Stats</h2><button class="btn sm" id="statsReload">Refresh</button></div>
+        <div class="numbers" id="totals"></div>
+        <div class="grid two">
+          <div class="block"><h3>Taps, last 14 days</h3><div class="bars" id="statDays"></div></div>
+          <div class="block"><h3>Arrivals today by hour</h3><div class="bars h24" id="statArrivals"></div></div>
+        </div>
+        <div class="block"><h3>Taps by hour, last 24 hours</h3><div class="bars h24" id="statHours"></div></div>
+        <div class="grid three">
+          <div class="block"><h3>Most tapped</h3><div class="mini" id="statTop"></div></div>
+          <div class="block"><h3>Phones</h3><div class="mini" id="statDevices"></div></div>
+          <div class="block"><h3>Handouts</h3><div class="mini" id="statItems"></div></div>
+        </div>
+      </section>
+
+      <!-- ===== log ===== -->
+      <section data-page="log" hidden>
+        <h2>Activity</h2>
+        <div class="log" id="logList"></div>
+        <button class="btn" id="logMore" hidden>Older</button>
+      </section>
+
+      <!-- ===== organisers ===== -->
+      <section data-page="admins" hidden>
+        <h2>Organisers</h2>
+        <p class="muted"><b>admin</b> can do everything. <b>desk</b> can register people, give cards, check in, hand things out, answer help requests and look things up.</p>
+        <form class="inline" id="addAdmin" data-admin><input name="email" type="email" placeholder="email" required><input name="name" placeholder="name"><select name="role" class="w-role"><option>admin</option><option>desk</option></select><button class="btn primary" type="submit">Add</button></form>
+        <div class="reveal" id="adminReveal" hidden></div>
+        <div class="list" id="adminList"></div>
+        <form class="block narrow" id="myPw">
+          <h3>My password</h3>
+          <input name="current" type="password" placeholder="Current" autocomplete="current-password" required>
+          <input name="password" type="password" placeholder="New (8+ characters)" autocomplete="new-password" minlength="8" required>
+          <p class="err"></p>
+          <button class="btn" type="submit">Change</button>
+        </form>
+      </section>
+
+      <!-- ===== setup ===== -->
+      <section data-page="setup" hidden>
+        <h2>Setup</h2>
+        <div class="block">
+          <h3>The three hosts</h3>
+          <div class="grid two">
+            <label class="field"><span>1 · Card link base (on the chip)</span><input name="card_base" placeholder="https://bobabash.github.io"></label>
+            <label class="field"><span>1 · Redirect repo</span><input name="redirect_repo" placeholder="bobabash/bobabash.github.io"></label>
+            <label class="field"><span>2 · Sites repo</span><input name="repo" placeholder="bobabash/sites"></label>
+            <label class="field"><span>2 · Project page, <code>{id}</code> = card number</span><input name="project_template"></label>
+            <label class="field span2"><span>3 · This dashboard's public address (the cards ask it live)</span><input name="dashboard_url" placeholder="https://cards.boba-bash.xyz"></label>
+          </div>
+          <div class="actions"><button class="btn primary" id="saveSetup">Save</button></div>
+        </div>
+        <div class="block">
+          <h3>GitHub sync</h3>
+          <p class="muted">Writes <code>map.json</code>, a page per card copied from <code>card.html</code>, and profile pages into the redirect repo, and a folder per new card from <code>template/</code> into the sites repo. Runs a few seconds after every change and every 10 minutes.</p>
+          <p class="small" id="ghState"></p>
+          <div class="actions"><button class="btn" id="syncNow">Sync now</button></div>
+        </div>
+        <div class="block">
+          <h3>Backup</h3>
+          <div class="actions"><a class="btn" href="/api/admin/export.json" download>Full backup (JSON)</a><a class="btn" href="/api/admin/export.csv" download>People (CSV)</a></div>
+        </div>
+        <div class="block danger-zone" id="resetBox">
+          <h3>Start fresh</h3>
+          <p class="muted">Run this once, right before the event, to throw away all testing data. It removes every person, card, team, message, schedule item, help request, handout, point, tap, upload and the activity log. Card numbers start again at 1. Organiser accounts stay. A full backup is saved on the server first.</p>
+          <form id="resetStep1" class="inline">
+            <input name="password" type="password" placeholder="Your password" autocomplete="current-password" required>
+            <button class="btn danger" type="submit">Start reset…</button>
+          </form>
+          <form id="resetStep2" hidden>
+            <p class="reveal" id="resetCounts"></p>
+            <div class="grid">
+              <label class="check"><input type="checkbox" name="confirm_backup"> I downloaded a backup (button above) or don't need one</label>
+              <label class="check"><input type="checkbox" name="github"> Also clean the GitHub repos: delete every card page, profile page and card folder, empty map.json. card.html, template/ and your other files stay.</label>
+              <label class="check"><input type="checkbox" name="keep_settings" checked> Keep setup (hosts, repos, event name, splash time, instructions). Live switches go back to safe defaults either way.</label>
+              <label class="field"><span>Type <b id="resetPhrase"></b> to confirm</span><input name="phrase" autocomplete="off" spellcheck="false"></label>
+              <label class="field"><span>Your password again</span><input name="password" type="password" autocomplete="current-password"></label>
+            </div>
+            <p class="err"></p>
+            <div class="actions"><button class="btn danger" type="submit">Erase everything</button><button class="btn ghost" type="button" id="resetCancel">Cancel</button><span class="muted small" id="resetTimer"></span></div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="scrim" id="scrim" hidden></div>
+  <aside class="drawer" id="drawer" hidden aria-label="Details">
+    <header class="drawer-h">
+      <h2 id="dTitle"></h2>
+      <span id="dPills"></span>
+      <button class="icon-btn" id="dClose" aria-label="Close">✕</button>
+    </header>
+    <div class="drawer-b" id="dBody"></div>
+  </aside>
+
+  <div class="toast" id="toast" hidden></div>
+  <div id="printArea" class="print-area"></div>
+
+  <script src="/static/qrcode.js"></script>
+  <script src="/static/md.js"></script>
+  <script src="/static/admin.js"></script>
+</body>
+</html>
