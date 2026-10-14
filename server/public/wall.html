@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Boba Bash Live</title>
+  <link rel="icon" href="/static/icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/wall.css">
+</head>
+<body>
+  <header>
+    <img src="/static/boba-bash.webp" alt="" width="150" height="104">
+    <div class="title"><h1 id="ev">Boba Bash</h1><p id="note"></p></div>
+    <div class="clock" id="clock"></div>
+  </header>
+  <section class="nums">
+    <div><b id="nTaps">0</b><span>taps today</span></div>
+    <div><b id="nHere">0</b><span>people here</span></div>
+    <div><b id="nTotal">0</b><span>taps all time</span></div>
+  </section>
+  <main>
+    <section class="col">
+      <h2>Live taps</h2>
+      <ol class="feed" id="feed"></ol>
+    </section>
+    <section class="col">
+      <h2>Now</h2>
+      <div id="now" class="sched"></div>
+      <h2 class="gap">Next</h2>
+      <div id="next" class="sched"></div>
+    </section>
+    <section class="col">
+      <h2 id="boardTitle">Teams</h2>
+      <ol class="board" id="board"></ol>
+      <h2 class="gap">Most tapped today</h2>
+      <ol class="board small" id="taps"></ol>
+    </section>
+  </main>
+  <footer><span id="ticker"></span></footer>
+  <script src="/static/wall.js"></script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Boba Bash Cards</title>
+  <meta name="description" content="Manage your Boba Bash NFC card: point it at your project, your profile or any link.">
+  <link rel="icon" href="/static/icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/home.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/"><img src="/static/icon.png" alt="" width="28" height="19"> Boba Bash Cards</a>
+    <nav><a href="/me">Log in</a></nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <img class="logo" src="/static/boba-bash.webp" alt="Hack Club's Boba Bash" width="300" height="208">
+      <h1>Manage your Boba Bash NFC card here.</h1>
+      <p class="lead">Your card opens whatever you want: your project, your own profile page, or any link. Change it whenever you like. The card never needs rewriting.</p>
+      <div class="cta">
+        <a class="btn" href="/me#setup">Set up my card</a>
+        <a class="btn ghost" href="/me">Log in</a>
+      </div>
+      <p class="announce" id="announce" hidden></p>
+    </section>
+
+    <section class="how">
+      <h2>How it works</h2>
+      <ol>
+        <li><b>Grab a card at the desk.</b> It has your card number and a 4-digit PIN.</li>
+        <li><b>Set it up on your laptop.</b> Card number, PIN, your email, a password. We mail you a code to confirm.</li>
+        <li><b>Point it anywhere.</b> Your project page, a profile with your links, or any site. Pick what your card says while it loads, too.</li>
+        <li><b>Tap it on any phone.</b> Boba Bash logo for a moment, then straight to your page.</li>
+      </ol>
+    </section>
+
+    <section class="can">
+      <h2>What you can do</h2>
+      <ul>
+        <li>Send your card to your project, your profile or any link</li>
+        <li>Build a profile page: photo, bio, links, socials, six themes</li>
+        <li>Write the line people see under the logo while it loads</li>
+        <li>See how many times it was tapped, from where, on what phone</li>
+        <li>Download your card's QR code</li>
+        <li>Ship your site to the sites repo and track your PR</li>
+      </ul>
+      <p class="note">Links stay locked during the event and open after. Lost your password? Reset it by email or with your card's PIN.</p>
+    </section>
+
+    <section class="guide" id="guide" hidden>
+      <h2>Instructions</h2>
+      <div class="md" id="guideBody"></div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Boba Bash Greater Noida · Hack Club</span>
+    <a href="/admin">Organisers</a>
+  </footer>
+
+  <script src="/static/md.js"></script>
+  <script src="/static/home.js"></script>
+</body>
+</html>
