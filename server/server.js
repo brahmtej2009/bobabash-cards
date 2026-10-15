@@ -217,6 +217,8 @@ const ctx = {
   wrap, startSession, endSession, needAdmin, needDesk, needOwner, sendOtp, checkOtp, saveUpload, deleteFile,
   dayKey, todayStart, device, lastDays, tapStats, noticeVisible,
   sync: () => gh.schedule(db, DATA_DIR),
+  // live updates to people's open dashboards: 'notice' (a message went out), 'person' (something about them changed)
+  bus: new (require('node:events'))().setMaxListeners(0),
 };
 
 // ---------- public, read-only ----------
