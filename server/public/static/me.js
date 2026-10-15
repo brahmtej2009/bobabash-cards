@@ -235,7 +235,7 @@
     const latest = c.notices.slice(0, 2);
     $('#hInbox').replaceChildren(el('span', { class: 'k', text: `Inbox${c.unread ? ` · ${c.unread} new` : ''}` }),
       ...(latest.length ? latest.map((n) => el('p', {}, el('b', { text: n.title }), el('span', { class: 'when', text: ` ${ago(n.ts)}` }))) : [el('p', { class: 'empty-note', text: 'No messages yet.' })]),
-      latest.length ? el('button', { class: 'btn sm ghost', type: 'button', text: 'Open inbox', onclick: () => tab('inbox') }) : null);
+      ...(latest.length ? [el('button', { class: 'btn sm ghost', type: 'button', text: 'Open inbox', onclick: () => tab('inbox') })] : []));
 
     // ---- card ----
     $('#noCard').hidden = c.cards.length > 0;
@@ -319,7 +319,7 @@
     g.textContent = '';
     if (c.public.instructions_md.trim()) g.append(window.renderMarkdown(c.public.instructions_md));
     else g.append(el('p', { class: 'sub', text: 'No instructions yet. Check back during the event.' }));
-    $('#accInfo').replaceChildren(el('b', { text: c.name }), el('br'), c.email, c.github ? ` · @${c.github}` : '', c.tags.length ? el('br') : null, c.tags.length ? `Tags: ${c.tags.join(', ')}` : '');
+    $('#accInfo').replaceChildren(el('span', {}, el('b', { text: c.name }), el('br'), c.email || '', c.github ? ` · @${c.github}` : '', c.tags.length ? el('br') : null, c.tags.length ? `Tags: ${c.tags.join(', ')}` : ''));
 
     if (!profileDirty) fillProfile(c.profile);
     if (current === 'inbox') markRead();
