@@ -18,20 +18,23 @@ Organisers
   cards admin passwd <email> [--set] | admin role <email> admin|desk | admin rm <email> | admin list
 
 People
-  cards add "<name>" [--email x] [--phone x] [--github x] [--tags a,b] [--team <id>] [--card next|<n>] [--checkin] [--allow-dupes]
+  cards add "<name>" [--email x] [--phone x] [--github x] [--tags a,b] [--team <id>] [--card next|<n>] [--pin 4821] [--checkin] [--allow-dupes]
   cards people [--here|--away|--nocard]
   cards show <person#>                  cards show card:<n>
   cards edit <person#> --name x --email x --phone x --github x --tags a,b --team <id|none>
   cards checkin <person#> | cards checkout <person#>
   cards points <person#> <+/-n> ["reason"]
   cards reset-account <person#>         they set up again
+  cards passwd <person#> [--set]        set their password (prints one, --set to type it)
   cards disable <person#> | cards enable <person#> | cards delete <person#>
 
 Cards
-  cards give <person#> [<card#>|next] [--new-pin] [--second] [--replace]
+  cards give <person#> [<card#>|next] [--pin 4821] [--new-pin] [--second] [--replace]
+  cards card add <card#> <pin>          a printed card from the box, not given yet
+  cards import cards.csv [--overwrite]  many printed cards, one "card,pin" per line
   cards take <card#>                    unlink from its holder
   cards blanks <count>                  make blank cards, prints PINs
-  cards pin <card#> | cards off <card#> | cards on <card#> | cards unlock <card#>
+  cards pin <card#> [newpin] | cards off <card#> | cards on <card#> | cards unlock <card#>
 
 Teams
   cards team add "<name>" [--place "Table 4"] | team list | team rm <id>
@@ -150,7 +153,7 @@ async function main() {
       const id = core.createPerson(db, { name: a1, email: flags.email, phone: flags.phone, github: flags.github, tags: flags.tags, team_id: flags.team }, ACTOR, { allowDupes: !!flags['allow-dupes'] });
       out(`Added #${id} ${a1}`);
       if (flags.card) {
-        const r = await core.issueCard(db, id, { cardId: flags.card === 'next' || flags.card === true ? null : flags.card }, ACTOR);
+        const r = await core.issueCard(db, id, { cardId: flags.card === 'next' || flags.card === true ? null : flags.card, pin: flags.pin }, ACTOR);
         out(`Card ${r.id}, ${r.pin ? `PIN ${r.pin}` : 'PIN as printed'}, chip URL ${U.getSettings(db).card_base}/${r.id}`);
       }
       if (flags.checkin) core.setCheckin(db, id, true, ACTOR);
@@ -191,11 +194,20 @@ async function main() {
     case 'checkout': core.setCheckin(db, personId(a1), false, ACTOR); out('Check-in undone.'); return;
     case 'points': core.addPoints(db, { personId: personId(a1) }, a2, a3, ACTOR); out(`Points now ${core.getPerson(db, personId(a1)).points}.`); return;
     case 'reset-account': core.resetAccount(db, personId(a1), ACTOR); out('They can set up again (card PIN, or the email the desk has).'); return;
+    case 'passwd': {
+      const id = personId(a1);
+      const pw = flags.set ? await typedPassword() : core.randomPassword();
+      db.prepare('UPDATE people SET password_hash = ?, claimed_at = COALESCE(claimed_at, ?), pw_fails = 0, pw_locked_until = 0 WHERE id = ?').run(await U.hashSecret(pw), U.now(), id);
+      core.killSessions(db, id);
+      U.audit(db, ACTOR, 'set their password', { person: id });
+      out(flags.set ? 'Password set.' : `New password: ${pw}`);
+      return;
+    }
     case 'disable': { const id = personId(a1); db.prepare('UPDATE people SET disabled = 1 WHERE id = ?').run(id); core.killSessions(db, id); U.audit(db, ACTOR, 'disabled person', { person: id }); out('Disabled.'); return; }
     case 'enable': { const id = personId(a1); db.prepare('UPDATE people SET disabled = 0 WHERE id = ?').run(id); U.audit(db, ACTOR, 'enabled person', { person: id }); out('Enabled.'); return; }
     case 'delete': core.deletePerson(db, personId(a1), ACTOR); dirty = true; out('Deleted.'); break;
     case 'give': {
-      const r = await core.issueCard(db, personId(a1), { cardId: a2 && a2 !== 'next' ? a2 : null, newPin: !!flags['new-pin'], allowSecond: !!flags.second, replace: !!flags.replace }, ACTOR);
+      const r = await core.issueCard(db, personId(a1), { cardId: a2 && a2 !== 'next' ? a2 : null, pin: flags.pin, newPin: !!flags['new-pin'], allowSecond: !!flags.second, replace: !!flags.replace }, ACTOR);
       out(`Card ${r.id} → #${personId(a1)}. ${r.pin ? `PIN ${r.pin}` : 'PIN as printed'}. Chip URL ${U.getSettings(db).card_base}/${r.id}`);
       dirty = true;
       break;
@@ -208,7 +220,21 @@ async function main() {
       dirty = true;
       break;
     }
-    case 'pin': out(`New PIN for card ${a1}: ${await core.newPin(db, cardNo(a1), ACTOR)}`); return;
+    case 'pin': out(`Card ${a1} PIN is now ${await core.newPin(db, cardNo(a1), ACTOR, a2)}`); return;
+    case 'card': {
+      if (a1 !== 'add') { out(HELP); return; }
+      out(`Card ${await core.addCard(db, a2, pos[3], ACTOR)} added with its PIN.`);
+      dirty = true;
+      break;
+    }
+    case 'import': {
+      const text = require('node:fs').readFileSync(a1, 'utf8');
+      const r = await core.importCards(db, text, ACTOR, { overwrite: !!flags.overwrite });
+      out(`${r.added.length} added, ${r.updated.length} PINs updated, ${r.skipped.length} already existed, ${r.errors.length} lines not understood`);
+      for (const e of r.errors.slice(0, 10)) out(`  ? ${e}`);
+      dirty = true;
+      break;
+    }
     case 'on':
     case 'off': {
       const id = cardNo(a1);

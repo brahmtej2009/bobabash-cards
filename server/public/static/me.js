@@ -80,7 +80,8 @@
     $$('#setupMode button').forEach((x) => x.classList.toggle('on', x === b));
     $$('[data-only=card]').forEach((x) => (x.hidden = setupMode !== 'card'));
     $$('[data-only=signup]').forEach((x) => (x.hidden = setupMode !== 'email' || !PUB?.owner_signup));
-    $('#setupHint').textContent = setupMode === 'card' ? 'Card number and PIN are on your card.' : PUB?.owner_signup ? 'Use the email the desk registered, or sign up fresh.' : 'Use the email the desk registered you with.';
+    $('#setupHint').textContent = setupMode === 'card' ? 'Card number and PIN are printed on your card.' : PUB?.owner_signup ? 'Use the email the desk registered, or sign up fresh. We email you a code.' : 'Use the email the desk registered you with. We email you a code.';
+    $('#setupBtn').textContent = setupMode === 'card' ? 'Set up and log in' : 'Send me a code';
   }));
 
   let pendingEmail = '';
@@ -97,10 +98,18 @@
     e.preventDefault();
     const f = e.currentTarget;
     guard(f, async () => {
-      const data = { email: f.email.value.trim(), password: f.password.value };
+      if (f.password2 && f.password.value !== f.password2.value) throw new Error('The two passwords do not match.');
+      const data = { email: f.email.value.trim(), password: f.password.value, password2: f.password2.value };
       if (setupMode === 'card') { data.card = f.card.value.trim(); data.pin = f.pin.value.trim(); if (!data.card || !data.pin) throw new Error('Add the card number and PIN.'); }
       else data.name = f.name.value.trim();
       const r = await api('/api/me/setup/start', data);
+      if (r.done) {
+        f.reset();
+        history.replaceState(null, '', '/me');
+        await load();
+        toast('You are in. Your card is linked to you.');
+        return;
+      }
       pendingEmail = data.email;
       $('#setupCode .to').textContent = r.to;
       $('#setupCode').code.value = r.dev || '';
@@ -139,7 +148,8 @@
     e.preventDefault();
     const f = e.currentTarget;
     guard(f, async () => {
-      await api('/api/me/forgot/verify', { email: forgotEmail, code: f.code.value.trim(), password: f.password.value });
+      if (f.password2 && f.password.value !== f.password2.value) throw new Error('The two passwords do not match.');
+      await api('/api/me/forgot/verify', { email: forgotEmail, code: f.code.value.trim(), password: f.password.value, password2: f.password2.value });
       history.replaceState(null, '', '/me');
       await load();
       toast('Password changed.');
@@ -149,7 +159,8 @@
     e.preventDefault();
     const f = e.currentTarget;
     guard(f, async () => {
-      await api('/api/me/pin-reset', { card: f.card.value.trim(), pin: f.pin.value.trim(), password: f.password.value });
+      if (f.password2 && f.password.value !== f.password2.value) throw new Error('The two passwords do not match.');
+      await api('/api/me/pin-reset', { card: f.card.value.trim(), pin: f.pin.value.trim(), password: f.password.value, password2: f.password2.value });
       history.replaceState(null, '', '/me');
       await load();
       toast('Password changed.');
@@ -492,7 +503,12 @@
   $('#pwForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const f = e.currentTarget;
-    guard(f, async () => { await api('/api/me/password', { current: f.current.value, password: f.password.value }); f.reset(); toast('Password changed.'); });
+    guard(f, async () => {
+      if (f.password2 && f.password.value !== f.password2.value) throw new Error('The two passwords do not match.');
+      await api('/api/me/password', { current: f.current.value, password: f.password.value });
+      f.reset();
+      toast('Password changed.');
+    });
   });
   $('#logout').addEventListener('click', async () => { await api('/api/me/logout', {}).catch(() => {}); C = null; showAuth('login'); });
   $('#logoutAll').addEventListener('click', async () => {

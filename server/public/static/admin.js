@@ -177,12 +177,10 @@
   const allTags = () => [...new Set(PEOPLE.flatMap((p) => p.tags))].sort();
   function fillSelects() {
     const keep = (sel, opts) => { const v = sel.value; sel.replaceChildren(...opts); sel.value = v; };
-    keep($('#regTeam'), teamOptions());
     keep($('#pTeam'), [el('option', { value: '', text: 'Any team' }), el('option', { value: 'none', text: 'No team' }), ...S.teams.map((t) => el('option', { value: t.id, text: t.name }))]);
     keep($('#pTag'), [el('option', { value: '', text: 'Any tag' }), ...allTags().map((t) => el('option', { value: t, text: t }))]);
     keep($('#autoScope'), [el('option', { value: 'unassigned', text: 'Everyone without a team' }), el('option', { value: 'checked_in', text: 'Checked in, without a team' }), ...allTags().map((t) => el('option', { value: `tag:${t}`, text: `Tagged ${t}, without a team` }))]);
     keep($('#iPick'), S.items.map((i) => el('option', { value: i.id, text: i.name })));
-    $('#nextCard').textContent = `#${S.next_card}`;
     $('#regItems').replaceChildren(...(S.items.length ? [el('span', { class: 'lbl', text: 'Hand out now' })] : []), ...S.items.map((i) => el('label', { class: 'check' }, el('input', { type: 'checkbox', name: 'item', value: i.id }), i.name)));
   }
 
@@ -215,11 +213,28 @@
     if (!cur.includes(t)) cur.push(t);
     reg.tags.value = cur.join(', ');
   } })));
-  reg.card.addEventListener('focus', () => (reg.cardmode.value = 'number'));
-  reg.card.addEventListener('input', () => {
-    const c = CARDS.find((x) => x.id === Number(reg.card.value));
-    $('#regHint').textContent = !reg.card.value ? '' : !c ? 'New card, gets a new PIN.' : c.person ? `Belongs to ${c.person.name}.` : 'Blank pre-made card, keeps its printed PIN.';
-  });
+  // The cards are printed already (number + PIN). The desk gets the next free number filled in (or types the one
+  // in their hand) and types the PIN printed on it. "No card for now": give one later from their panel.
+  let cardTouched = false;
+  function fillNextCard(force) {
+    if (S && (force || !cardTouched)) { reg.card.value = S.next_card; cardTouched = false; }
+  }
+  function renderCardMode() {
+    const mode = reg.cardmode.value;
+    $('#cardFields').hidden = mode === 'none';
+    const hint = $('#regHint');
+    if (mode === 'none') { hint.textContent = 'They can set up later by email, and you can give a card any time from their panel.'; return; }
+    fillNextCard(false);
+    const id = Number(reg.card.value);
+    const c = id && CARDS.find((x) => x.id === id);
+    hint.textContent = !id ? 'Type the card number.'
+      : c?.person ? `Card ${id} already belongs to ${c.person.name}. Pick another.`
+        : c?.status === 'disabled' ? `Card ${id} is switched off. Pick another.`
+          : 'Type the PIN printed on the card. You can change the number or PIN later from their panel.';
+  }
+  for (const r of $$('[name=cardmode]', reg)) r.addEventListener('change', renderCardMode);
+  reg.card.addEventListener('input', () => { cardTouched = true; renderCardMode(); });
+  $('#useNext').addEventListener('click', () => { fillNextCard(true); renderCardMode(); reg.pin.focus(); });
   let lastReg = null;
   reg.addEventListener('submit', run(async (e) => {
     e.preventDefault();
@@ -227,21 +242,27 @@
     const fd = new FormData(reg);
     const mode = fd.get('cardmode');
     const data = {
-      name: fd.get('name'), email: fd.get('email'), phone: fd.get('phone'), github: fd.get('github'), tags: fd.get('tags'),
-      team_id: fd.get('team_id') || null, note: fd.get('note'),
-      card: mode === 'none' ? 'none' : mode === 'next' ? 'next' : fd.get('card'),
-      new_pin: reg.new_pin.checked, checkin: reg.checkin.checked, allow_dupes: reg.allow_dupes.checked,
+      name: fd.get('name'), email: fd.get('email'), phone: fd.get('phone'), github: fd.get('github'), tags: fd.get('tags'), note: fd.get('note'),
+      card: mode === 'none' ? 'none' : fd.get('card').trim(),
+      pin: mode === 'none' ? '' : fd.get('pin').trim(),
+      checkin: reg.checkin.checked, allow_dupes: reg.allow_dupes.checked,
       items: fd.getAll('item').map(Number),
     };
-    if (mode === 'number' && !data.card) { $('.err', reg).textContent = 'Type the card number.'; return; }
+    if (mode !== 'none') {
+      if (!/^\d+$/.test(data.card)) { $('.err', reg).textContent = 'Type the card number.'; return; }
+      const c = CARDS.find((x) => x.id === Number(data.card));
+      if (c?.person) { $('.err', reg).textContent = `Card ${data.card} already belongs to ${c.person.name}.`; return; }
+      if (!/^\d{4,8}$/.test(data.pin)) { $('.err', reg).textContent = 'Type the PIN printed on the card (4 to 8 digits).'; reg.pin.focus(); return; }
+    }
     let r;
     try { r = await api('/api/admin/people', 'POST', data); } catch (x) { $('.err', reg).textContent = x.message; return; }
     lastReg = { ...r, name: data.name };
     showResult(lastReg);
     reg.reset();
-    $('#regHint').textContent = '';
+    cardTouched = false;
     await refresh();
     renderDesk();
+    renderCardMode();
     reg.name.focus();
   }));
   function showResult(r) {
@@ -253,7 +274,7 @@
     $('#rErr').textContent = r.card_error ? `Card not given: ${r.card_error}` : '';
     if (r.card) {
       $('#rId').textContent = r.card.id;
-      $('#rPin').textContent = r.card.pin || 'printed';
+      $('#rPin').textContent = r.card.pin || 'on file';
       $('#rQr').replaceChildren(qrSvg(r.card.url));
       $('#rUrl').textContent = `Flash ${short(r.card.url)}`;
     } else $('#rUrl').textContent = r.card_error ? '' : 'No card. They can set up with their email.';
@@ -263,6 +284,7 @@
   $('#rOpen').addEventListener('click', () => lastReg && openPerson(lastReg.person_id));
   $('#rPrint').addEventListener('click', () => lastReg?.card && printTags([{ id: lastReg.card.id, pin: lastReg.card.pin, name: lastReg.name }]));
   function renderDesk() {
+    renderCardMode();
     const rows = [...PEOPLE].sort((a, b) => b.created_at - a.created_at).slice(0, 8);
     $('#recent').replaceChildren(...(rows.length ? rows.map((p) => el('div', {},
       el('span', { class: 'row-main' }, pchip(p.id), p.cards.map(cchip), p.tags.map((t) => el('span', { class: 'tagchip', text: t }))),
@@ -441,16 +463,17 @@
     }));
 
     const reveal = el('div');
-    const giveNo = el('input', { placeholder: `next (#${S.next_card})`, class: 'w-tag', inputMode: 'numeric' });
+    const giveNo = el('input', { placeholder: `Card ID (empty = #${S.next_card})`, class: 'w-tag', inputMode: 'numeric' });
+    const givePin = el('input', { placeholder: 'PIN on it', class: 'w-id', inputMode: 'numeric', maxLength: 8 });
     const gNew = el('input', { type: 'checkbox' }), gSecond = el('input', { type: 'checkbox' }), gReplace = el('input', { type: 'checkbox' });
     const cards = el('div', {},
       mini(d.cards.map((c) => el('div', {},
         el('span', {}, cchip(c.id), ' ', el('a', { href: c.now_url, target: '_blank', rel: 'noopener', text: short(c.now_url) || c.now_reason }), el('span', { class: 'reason', text: reasonText(c.now_reason) })),
         el('span', {}, c.status === 'disabled' ? 'off · ' : '', `${c.scans} taps`)))),
       el('div', { class: 'inline wrap', style: { marginTop: '8px' } },
-        giveNo,
+        giveNo, givePin,
         el('button', { class: 'btn', type: 'button', text: d.cards.length ? 'Give another card' : 'Give card', onclick: run(async () => {
-          const r = await api(`/api/admin/people/${p.id}/card`, 'POST', { card: giveNo.value.trim() || null, new_pin: gNew.checked, allow_second: gSecond.checked, replace: gReplace.checked });
+          const r = await api(`/api/admin/people/${p.id}/card`, 'POST', { card: giveNo.value.trim() || null, pin: givePin.value.trim(), new_pin: gNew.checked, allow_second: gSecond.checked, replace: gReplace.checked });
           reveal.replaceChildren(el('div', { class: 'reveal' }, `Card ${r.id}: `, r.pin ? el('b', { text: r.pin }) : 'printed PIN', ` · flash ${short(r.url)}`,
             el('button', { class: 'btn sm', type: 'button', text: 'Print', style: { marginLeft: '8px' }, onclick: () => printTags([{ id: r.id, pin: r.pin, name: p.name }]) })));
           renderPersonDrawer(r.full);
@@ -458,10 +481,28 @@
           $('#dBody').prepend(reveal);
         }) })),
       el('div', { class: 'inline wrap opts' },
-        el('label', { class: 'check' }, gNew, 'New PIN'),
+        el('label', { class: 'check' }, gNew, 'Make up a new PIN (if PIN is empty)'),
         admin ? el('label', { class: 'check' }, gSecond, 'Allow a second card') : null,
         admin ? el('label', { class: 'check' }, gReplace, 'Take it from its holder') : null),
     );
+    // wrong card handed out, or a lost one: move them to another card number
+    if (d.cards.length) {
+      const from = el('select', { class: 'w-tag' }, d.cards.map((c) => el('option', { value: c.id, text: `card ${c.id}` })));
+      const to = el('input', { placeholder: 'New card number', inputMode: 'numeric', class: 'w-tag' });
+      const toPin = el('input', { placeholder: 'PIN on it', inputMode: 'numeric', maxLength: 8, class: 'w-id' });
+      cards.append(el('div', { class: 'swaprow' },
+        el('span', { class: 'lbl', text: 'Change card number:' }), from, el('span', { class: 'lbl', text: 'to' }), to, toPin,
+        el('button', { class: 'btn', type: 'button', text: 'Change', onclick: run(async () => {
+          if (!/^\d+$/.test(to.value.trim())) throw new Error('Type the new card number.');
+          const known = CARDS.find((x) => x.id === Number(to.value));
+          if (!known && !/^\d{4,8}$/.test(toPin.value.trim())) throw new Error('That card is new here. Type the PIN printed on it.');
+          if (!confirm(`Move ${p.name} from card ${from.value} to card ${to.value}? Card ${from.value} goes back to blank.`)) return;
+          const r = await api(`/api/admin/people/${p.id}/swap`, 'POST', { from: Number(from.value), to: Number(to.value), pin: toPin.value.trim() });
+          toast(`${p.name} now has card ${r.id}`);
+          renderPersonDrawer(r.full);
+          await refresh();
+        }) })));
+    }
 
     const mode = el('select', { disabled: !admin }, ['project', 'profile', 'custom'].map((m) => el('option', { value: m, text: { project: 'Project page', profile: 'Profile page', custom: 'Own link' }[m], selected: p.mode === m })));
     const custom = el('input', { value: p.custom_url || '', placeholder: 'Their own link', disabled: !admin });
@@ -487,6 +528,20 @@
       }) })) : null,
       mini(d.points.map((x) => el('div', {}, el('span', { text: `${x.delta > 0 ? '+' : ''}${x.delta} ${x.reason || ''}` }), el('span', { text: `${x.by.replace(/^(admin|cli):/, '')} · ${fmt(x.ts)}` })))));
 
+    // set their password for them (forgot it at the desk, no email access)
+    const pwIn = el('input', { type: 'text', placeholder: 'New password (empty = make one up)', autocomplete: 'off', class: 'grow' });
+    const pwRow = el('div', { class: 'inline wrap', style: { marginBottom: '8px' } }, pwIn,
+      el('button', { class: 'btn', type: 'button', text: p.claimed ? 'Reset password' : 'Set password', onclick: run(async () => {
+        const v = pwIn.value;
+        if (v && v.length < 8) throw new Error('Passwords need at least 8 characters.');
+        if (!confirm(`Set a new password for ${p.name}? They get logged out everywhere and log in with the new one.`)) return;
+        const r = await api(`/api/admin/people/${p.id}/password`, 'POST', { password: v });
+        pwIn.value = '';
+        renderPersonDrawer(r.full);
+        $('#dBody').querySelector('.pwreveal')?.replaceChildren(el('div', { class: 'reveal' },
+          r.password ? [`New password for ${p.name}: `, el('b', { text: r.password }), ' · shown once. They log in with ', p.email || `card ${d.cards[0]?.id || ''}`, ' and this.'] : 'Password changed.'));
+        toast('Password set');
+      }) }));
     const account = el('div', { class: 'inline wrap' },
       p.locked_out ? el('button', { class: 'btn', type: 'button', text: 'Clear login lockout', onclick: run(async () => reopenPerson(p.id, await api(`/api/admin/people/${p.id}/unlock`, 'POST', {}))) }) : null,
       admin && p.claimed ? el('button', { class: 'btn', type: 'button', text: 'Reset account', onclick: run(async () => { if (!confirm(`Clear ${p.name}'s password? They set up again with their card PIN or email.`)) return; reopenPerson(p.id, await api(`/api/admin/people/${p.id}/reset-account`, 'POST', {})); }) }) : null,
@@ -514,7 +569,7 @@
       d.help.length ? sec('Help requests', mini(d.help.map((h) => el('div', {}, el('span', { text: `${HELP_KIND[h.kind] || h.kind}: ${h.message || ''}` }), el('span', { text: `${h.status} · ${ago(h.ts)}` }))))) : null,
       sec(`Taps · ${d.stats.total}`, miniBars(d.stats.days)),
       sec('Messages they got', mini(d.notices.map((n) => el('div', {}, el('span', { text: n.title }), el('span', { text: n.read_at ? `read ${ago(n.read_at)}` : 'unread' }))))),
-      sec('Account', account),
+      sec('Account', el('p', { class: 'small muted', text: p.claimed ? `Set up ${fmt(p.claimed_at)}. Logs in with ${p.email || 'their card number'}.` : 'Not set up yet. They can set up at /me, or you can set a password here.' }), pwRow, el('div', { class: 'pwreveal' }), account),
       sec('History', mini(d.log.map((l) => el('div', {}, el('span', { text: l.action }), el('span', { title: l.detail || '', text: `${l.actor.replace(/^(admin|cli|owner):/, '')} · ${fmt(l.ts)}` }))))),
     ]);
   }
@@ -540,8 +595,48 @@
     const skip = el('input', { type: 'checkbox', checked: !!c.skip_override, disabled: !admin });
     const reveal = el('div');
     const patch = async (data, msg) => { await api(`/api/admin/cards/${c.id}`, 'PATCH', data); toast(msg || 'Saved'); reopenCard(c.id); };
+
+    // give to someone: search people, pick, optional PIN on the card
+    const giveSearch = el('input', { placeholder: 'Find a person: name, email, phone', autocomplete: 'off' });
+    const giveResults = el('div', { class: 'gresults inline-results', hidden: true });
+    const givePin = el('input', { placeholder: 'PIN (empty = keep)', inputMode: 'numeric', maxLength: 8, class: 'w-tag' });
+    const gSecond = el('input', { type: 'checkbox' });
+    giveSearch.addEventListener('input', () => {
+      const q = giveSearch.value.trim().toLowerCase();
+      if (!q) { giveResults.hidden = true; return; }
+      const rows = PEOPLE.filter((p) => [p.name, p.email, p.phone, p.github].some((v) => v && v.toLowerCase().includes(q))).slice(0, 8);
+      giveResults.replaceChildren(...rows.map((p) => el('button', { type: 'button', onclick: run(async () => {
+        if (p.cards.length && !gSecond.checked) throw new Error(`${p.name} already has card ${p.cards.join(', ')}. Tick "allow a second card" first.`);
+        if (!confirm(`Give card ${c.id} to ${p.name}?${c.person ? ` It's taken from ${c.person.name}.` : ''}`)) return;
+        await api(`/api/admin/cards/${c.id}/give`, 'POST', { person_id: p.id, pin: givePin.value.trim(), allow_second: gSecond.checked, replace: !!c.person });
+        toast(`Card ${c.id} → ${p.name}`);
+        reopenCard(c.id);
+      }) }, el('b', { text: p.name }), el('span', { class: 'muted', text: [p.email, p.cards.length ? `has #${p.cards.join(', #')}` : 'no card'].filter(Boolean).join(' · ') }))));
+      giveResults.hidden = !rows.length;
+    });
+    const holder = el('div', {},
+      c.person ? el('p', {}, pchip(c.person.id, c.person.name), c.linked_at ? el('span', { class: 'muted small', text: ` since ${fmt(c.linked_at)}` }) : null) : el('p', { class: 'muted', text: 'Nobody yet.' }),
+      el('div', { class: 'inline wrap' }, giveSearch, givePin), giveResults,
+      admin ? el('label', { class: 'check' }, gSecond, 'Allow a second card for that person') : null,
+      c.person ? el('p', { class: 'muted small', text: 'Picking someone moves the card to them.' }) : null);
+
+    // PIN: type one (what's printed, or anything 4-8 digits) or make one up
+    const pinIn = el('input', { placeholder: 'New PIN, 4-8 digits', inputMode: 'numeric', maxLength: 8, class: 'w-tag' });
+    const setPin = (pin) => run(async () => {
+      if (pin !== null && !/^\d{4,8}$/.test(pin)) throw new Error('A PIN is 4 to 8 digits.');
+      if (!confirm(`Change card ${c.id}'s PIN? ${c.person ? `${c.person.name}'s` : 'The'} old PIN stops working.`)) return;
+      const r = await api(`/api/admin/cards/${c.id}/pin`, 'POST', pin === null ? {} : { pin });
+      pinIn.value = '';
+      reveal.replaceChildren(el('div', { class: 'reveal' }, `Card ${c.id} PIN is now `, el('b', { text: r.pin }), '.'));
+      toast('PIN changed');
+    });
+    const pinBox = admin ? el('div', { class: 'inline wrap' }, pinIn,
+      el('button', { class: 'btn', type: 'button', text: 'Set this PIN', onclick: () => setPin(pinIn.value.trim())() }),
+      el('button', { class: 'btn ghost', type: 'button', text: 'Make one up', onclick: setPin(null) })) : el('p', { class: 'muted small', text: 'Only admins change PINs.' });
+
     showDrawer(`Card ${c.id}`, [el('span', { class: `pill ${c.status === 'active' ? 'active' : 'disabled'}`, text: c.status === 'active' ? 'on' : 'off' }), c.person ? null : el('span', { class: 'pill', text: 'blank' })], [
-      sec('Holder', c.person ? el('p', {}, pchip(c.person.id, c.person.name), c.linked_at ? el('span', { class: 'muted small', text: ` since ${fmt(c.linked_at)}` }) : null) : el('p', { class: 'muted', text: 'Nobody. Give it to someone from their person panel or the Desk.' })),
+      sec('Holder', holder),
+      sec('PIN', pinBox, reveal),
       sec('Where a tap goes',
         el('div', { class: 'now' }, c.now_url ? el('a', { href: c.now_url, target: '_blank', rel: 'noopener', text: short(c.now_url) }) : el('span', { class: 'muted', text: 'Shows a status page' }), el('span', { class: 'reason', text: reasonText(c.now_reason) })),
         el('label', { class: 'field' }, el('span', { text: 'Organiser override for this card' }), el('div', { class: 'inline' }, adminUrl,
@@ -553,18 +648,13 @@
         admin ? el('button', { class: `btn ${c.status === 'active' ? 'danger' : 'accent'}`, type: 'button', text: c.status === 'active' ? 'Switch off' : 'Switch on', onclick: run(() => (c.status === 'active' && !confirm(`Switch off card ${c.id}? Taps show "switched off".`) ? null : patch({ status: c.status === 'active' ? 'disabled' : 'active' }))) }) : null,
         el('a', { class: 'btn', href: cardUrl(c.id), target: '_blank', rel: 'noopener', text: 'Test tap' }),
         el('button', { class: 'btn', type: 'button', text: 'Print', onclick: () => printTags([{ id: c.id, name: c.person?.name }]) }),
-        admin ? el('button', { class: 'btn', type: 'button', text: 'New PIN', onclick: run(async () => {
-          if (!confirm(`New PIN for card ${c.id}? The printed one stops working.`)) return;
-          const r = await api(`/api/admin/cards/${c.id}/pin`, 'POST', {});
-          reveal.replaceChildren(el('div', { class: 'reveal' }, `New PIN for card ${c.id}: `, el('b', { text: r.pin }), ' · shown once'));
-        }) }) : null,
         c.locked_out ? el('button', { class: 'btn', type: 'button', text: 'Clear PIN lockout', onclick: run(async () => { await api(`/api/admin/cards/${c.id}/unlock`, 'POST', {}); toast('Cleared'); reopenCard(c.id); }) }) : null,
         admin && c.person ? el('button', { class: 'btn danger', type: 'button', text: 'Take back', onclick: run(async () => {
           if (!confirm(`Take card ${c.id} back from ${c.person.name}? It goes blank.`)) return;
           await api(`/api/admin/cards/${c.id}/unlink`, 'POST', {});
           toast('Card is blank');
           reopenCard(c.id);
-        }) }) : null), reveal),
+        }) }) : null)),
       sec(`Taps · ${stats.total}`, miniBars(stats.days)),
       sec('Site PRs', mini(prs.map((p) => el('div', {}, el('span', {}, el('a', { href: p.url, target: '_blank', rel: 'noopener', text: `#${p.number}` }), ` ${p.title}`), el('span', { text: `@${p.author} · ${p.merged ? 'merged' : p.state}` }))))),
       sec('Recent taps', mini(scans.map((s) => el('div', {}, el('span', { text: fmt(s.ts) }), el('span', { title: s.ua || '', text: [s.device, s.country, reasonText(s.reason)].filter(Boolean).join(' · ') }))))),
@@ -623,33 +713,161 @@
     renderCards();
   }));
 
+  $('#cardAdd').addEventListener('submit', run(async (e) => {
+    e.preventDefault();
+    const f = e.currentTarget;
+    if (!/^\d{4,8}$/.test(f.pin.value.trim())) throw new Error('A PIN is 4 to 8 digits.');
+    const r = await api('/api/admin/cards', 'POST', { id: f.id.value.trim(), pin: f.pin.value.trim() });
+    toast(`Card ${r.id} added`);
+    f.reset();
+    f.id.focus();
+    await refresh();
+    renderCards();
+  }));
+  $('#cardImport').addEventListener('submit', run(async (e) => {
+    e.preventDefault();
+    const f = e.currentTarget;
+    const r = await api('/api/admin/cards/import', 'POST', { text: f.text.value, overwrite: f.overwrite.checked });
+    const bits = [`${r.added.length} added`, r.updated.length ? `${r.updated.length} PINs updated` : '', r.skipped.length ? `${r.skipped.length} already existed (${r.skipped.slice(0, 8).join(', ')}${r.skipped.length > 8 ? '…' : ''})` : '', r.errors.length ? `${r.errors.length} lines not understood: ${r.errors.slice(0, 3).join(' | ')}` : ''].filter(Boolean);
+    toast(bits.join(' · '), r.errors.length > 0);
+    if (!r.errors.length) f.reset();
+    await refresh();
+    renderCards();
+  }));
+
   // ================= teams =================
   const loadTeams = run(async () => {
     const r = await api('/api/admin/teams');
-    const admin = isAdmin();
+    $('#teamsSummary').textContent = `${r.teams.length} teams · ${r.unassigned} people without a team`;
     $('#teamList').replaceChildren(...(r.teams.length ? r.teams.map((t) => {
       const total = t.points + t.members.reduce((a, m) => a + m.points, 0);
-      const ptsIn = el('input', { type: 'number', placeholder: '+10', class: 'w-id' });
-      const ptsWhy = el('input', { placeholder: 'reason' });
-      const edit = el('form', { class: 'grid two' },
-        el('label', { class: 'field' }, el('span', { text: 'Name' }), el('input', { name: 'name', value: t.name })),
-        el('label', { class: 'field' }, el('span', { text: 'Colour' }), el('input', { name: 'color', type: 'color', value: t.color || '#888888' })),
-        el('label', { class: 'field' }, el('span', { text: 'Table / room' }), el('input', { name: 'place', value: t.place || '' })),
-        el('label', { class: 'field' }, el('span', { text: 'Note for members' }), el('input', { name: 'note', value: t.note || '' })),
-        el('div', { class: 'span2 inline wrap' },
-          el('button', { class: 'btn primary sm', type: 'submit', text: 'Save' }),
-          el('button', { class: 'btn danger sm', type: 'button', text: 'Delete team', onclick: run(async () => { if (!confirm(`Delete ${t.name}? Members become teamless.`)) return; await api(`/api/admin/teams/${t.id}`, 'DELETE'); toast('Deleted'); await refresh(); loadTeams(); }) })));
-      edit.addEventListener('submit', run(async (e) => { e.preventDefault(); await api(`/api/admin/teams/${t.id}`, 'PATCH', Object.fromEntries(new FormData(edit))); toast('Saved'); await refresh(); loadTeams(); }));
-      return el('div', { class: 'team-row', style: { borderLeftColor: t.color || 'var(--line2)' } },
+      return el('div', { class: 'team-row click', style: { borderLeftColor: t.color || 'var(--line2)' }, onclick: () => openTeam(t.id) },
         el('div', { class: 'th' }, el('h3', { text: t.name }), t.place ? el('span', { class: 'muted', text: t.place }) : null,
           el('span', { class: 'pill', text: `${t.members.length} people` }), el('span', { class: 'pill blue', text: `${total} pts` }),
-          el('span', { class: 'muted small', text: `${t.members.filter((m) => m.checked_in_at).length} here` }),
-          admin ? el('span', { class: 'inline', style: { marginLeft: 'auto' } }, ptsIn, ptsWhy, el('button', { class: 'btn sm', type: 'button', text: 'Team points', onclick: run(async () => { await api(`/api/admin/teams/${t.id}/points`, 'POST', { delta: ptsIn.value, reason: ptsWhy.value }); toast('Points given'); await refresh(); loadTeams(); }) })) : null,
-          el('button', { class: 'btn sm', type: 'button', text: 'Message team', hidden: !admin, onclick: () => { go('notify'); $('#nKind').value = 'team'; renderNotifyTarget(); $('#nTargetSel').value = t.id; updatePreview(); } })),
-        el('div', { class: 'members-list' }, t.members.length ? t.members.map((m) => pchip(m.id, `${m.name}${m.checked_in_at ? '' : ' (away)'}`)) : el('span', { class: 'muted small', text: 'No members yet. Set teams from People (bulk) or a person\'s panel.' })),
-        admin ? el('details', {}, el('summary', { text: 'Edit team' }), edit) : null);
+          el('span', { class: 'muted small', text: `${t.members.filter((m) => m.checked_in_at).length} here${t.notes ? ` · ${t.notes} notes` : ''}` }),
+          el('button', { class: 'btn sm', type: 'button', text: 'Open', style: { marginLeft: 'auto' }, onclick: (e) => { e.stopPropagation(); openTeam(t.id); } })),
+        el('div', { class: 'members-list' }, t.members.length ? t.members.map((m) => pchip(m.id, `${m.name}${m.checked_in_at ? '' : ' (away)'}`)) : el('span', { class: 'muted small', text: 'No members yet. Open the team to add people.' })));
     }) : [el('p', { class: 'empty', text: 'No teams yet.' })]));
   });
+
+  // ---------- one team: members, message, notes, points, history, edit ----------
+  const openTeam = run(async (id) => {
+    const d = await api(`/api/admin/teams/${id}`);
+    drawerFor = { kind: 'team', id };
+    renderTeamDrawer(d);
+  });
+  async function reopenTeam(id) {
+    await refresh();
+    if (drawerFor?.kind === 'team' && drawerFor.id === id) renderTeamDrawer(await api(`/api/admin/teams/${id}`));
+    if (view === 'teams') loadTeams();
+  }
+  function renderTeamDrawer({ team: t, members, notes, history, notices, points }) {
+    const admin = isAdmin();
+    const total = t.points + members.reduce((a, m) => a + m.points, 0);
+
+    // members: list with remove, add by search
+    const addSearch = el('input', { placeholder: 'Add someone: name, email, card number', autocomplete: 'off' });
+    const addResults = el('div', { class: 'gresults inline-results', hidden: true });
+    addSearch.addEventListener('input', () => {
+      const q = addSearch.value.trim().toLowerCase().replace(/^#/, '');
+      if (!q) { addResults.hidden = true; return; }
+      const rows = PEOPLE.filter((p) => p.team_id !== t.id && (p.cards.includes(Number(q)) || [p.name, p.email, p.github].some((v) => v && v.toLowerCase().includes(q)))).slice(0, 8);
+      addResults.replaceChildren(...rows.map((p) => el('button', { type: 'button', onclick: run(async () => {
+        if (p.team_id && !confirm(`${p.name} is on ${teamById(p.team_id)?.name || 'another team'}. Move them to ${t.name}?`)) return;
+        await api(`/api/admin/teams/${t.id}/members`, 'POST', { ids: [p.id] });
+        toast(`${p.name} joined ${t.name}`);
+        reopenTeam(t.id);
+      }) }, el('b', { text: p.name }), el('span', { class: 'muted', text: p.team_id ? `on ${teamById(p.team_id)?.name || 'a team'}` : 'no team' }))));
+      addResults.hidden = !rows.length;
+    });
+    const memberList = el('div', { class: 'mini' }, members.length ? members.map((m) => el('div', {},
+      el('span', {}, pchip(m.id, m.name), ' ', m.cards.map(cchip), m.checked_in_at ? el('span', { class: 'pill here', text: 'here' }) : null),
+      el('span', { class: 'inline' }, el('span', { text: `${m.points} pts` }),
+        admin ? el('button', { class: 'btn sm ghost', type: 'button', text: 'Remove', onclick: run(async () => {
+          if (!confirm(`Take ${m.name} off ${t.name}?`)) return;
+          await api(`/api/admin/teams/${t.id}/members/${m.id}`, 'DELETE');
+          reopenTeam(t.id);
+        }) }) : null))) : el('span', { class: 'muted', text: 'Nobody yet.' }));
+
+    // message just this team
+    const mTitle = el('input', { placeholder: 'Title', maxLength: 140 });
+    const mBody = el('textarea', { placeholder: 'Message (optional)', rows: 3, maxLength: 3000 });
+    const mUrgent = el('input', { type: 'checkbox' }), mEmail = el('input', { type: 'checkbox' });
+    const message = el('div', { class: 'grid' }, mTitle, mBody,
+      el('div', { class: 'inline wrap' }, el('label', { class: 'check' }, mUrgent, 'Urgent'), el('label', { class: 'check' }, mEmail, 'Also email'),
+        el('button', { class: 'btn accent', type: 'button', text: `Send to ${members.length} ${members.length === 1 ? 'person' : 'people'}`, disabled: !members.length, onclick: run(async () => {
+          if (!mTitle.value.trim()) throw new Error('Give it a title.');
+          const r = await api('/api/admin/notices', 'POST', { title: mTitle.value, body: mBody.value, target_kind: 'team', target: t.id, urgent: mUrgent.checked, email: mEmail.checked });
+          toast(`Sent to ${r.count}${r.emailing ? `, emailing ${r.emailing}` : ''}`);
+          reopenTeam(t.id);
+        }) })),
+      mini(notices.map((n) => el('div', {}, el('span', {}, n.urgent ? el('span', { class: 'pill bad', text: 'urgent' }) : null, ' ', n.title), el('span', { text: `read ${n.reads}/${members.length} · ${fmt(n.ts)}` })))));
+
+    // organiser notes
+    const noteIn = el('textarea', { placeholder: 'Note for organisers (members don\'t see these)', rows: 2, maxLength: 2000 });
+    const noteBox = el('div', { class: 'grid' }, noteIn,
+      el('div', {}, el('button', { class: 'btn', type: 'button', text: 'Add note', onclick: run(async () => {
+        if (!noteIn.value.trim()) throw new Error('Write the note first.');
+        await api(`/api/admin/teams/${t.id}/notes`, 'POST', { text: noteIn.value });
+        reopenTeam(t.id);
+      }) })),
+      el('div', { class: 'notes' }, notes.length ? notes.map((n) => el('div', { class: 'note' },
+        el('p', { text: n.text }),
+        el('span', { class: 'muted small' }, `${n.by || ''} · ${fmt(n.ts)} `, admin ? el('button', { class: 'linkbtn', type: 'button', text: 'delete', onclick: run(async () => { if (!confirm('Delete this note?')) return; await api(`/api/admin/teams/${t.id}/notes/${n.id}`, 'DELETE'); reopenTeam(t.id); }) }) : null))) : el('p', { class: 'muted small', text: 'No notes yet.' })));
+
+    // points
+    const ptsIn = el('input', { type: 'number', placeholder: '+10', class: 'w-id' });
+    const ptsWhy = el('input', { placeholder: 'reason' });
+    const pointsBox = el('div', {},
+      el('p', {}, el('b', { text: `${total} points` }), el('span', { class: 'muted small', text: ` (${t.points} team + ${total - t.points} from members)` })),
+      admin ? el('div', { class: 'inline' }, ptsIn, ptsWhy, el('button', { class: 'btn', type: 'button', text: 'Give', onclick: run(async () => {
+        await api(`/api/admin/teams/${t.id}/points`, 'POST', { delta: ptsIn.value, reason: ptsWhy.value });
+        toast('Points given');
+        reopenTeam(t.id);
+      }) })) : null,
+      mini(points.map((x) => el('div', {}, el('span', { text: `${x.delta > 0 ? '+' : ''}${x.delta} ${x.reason || ''}` }), el('span', { text: fmt(x.ts) })))));
+
+    // edit
+    const edit = el('form', { class: 'grid two' },
+      el('label', { class: 'field' }, el('span', { text: 'Name' }), el('input', { name: 'name', value: t.name, disabled: !admin })),
+      el('label', { class: 'field' }, el('span', { text: 'Colour' }), el('input', { name: 'color', type: 'color', value: t.color || '#888888', disabled: !admin })),
+      el('label', { class: 'field' }, el('span', { text: 'Table / room' }), el('input', { name: 'place', value: t.place || '', disabled: !admin })),
+      el('label', { class: 'field span2' }, el('span', { text: 'Note for members (they see this)' }), el('textarea', { name: 'note', value: t.note || '', rows: 2, disabled: !admin })),
+      admin ? el('div', { class: 'span2 inline wrap' },
+        el('button', { class: 'btn primary', type: 'submit', text: 'Save' }),
+        el('button', { class: 'btn danger', type: 'button', text: 'Delete team', onclick: run(async () => {
+          if (!confirm(`Delete ${t.name}? Its ${members.length} members become teamless. Notes and history go too.`)) return;
+          await api(`/api/admin/teams/${t.id}`, 'DELETE');
+          closeDrawer();
+          toast('Team deleted');
+          await refresh();
+          loadTeams();
+        }) })) : null);
+    edit.addEventListener('submit', run(async (e) => { e.preventDefault(); await api(`/api/admin/teams/${t.id}`, 'PATCH', Object.fromEntries(new FormData(edit))); toast('Saved'); reopenTeam(t.id); }));
+
+    const sw = el('span', { class: 'swatch-dot', style: { background: t.color || '#888' } });
+    showDrawer(t.name, [sw, el('span', { class: 'muted small', text: `${members.length} people${t.place ? ` · ${t.place}` : ''}` })], [
+      sec(`Members · ${members.length}`, memberList, admin ? el('div', { style: { marginTop: '8px' } }, addSearch, addResults) : null),
+      admin ? sec('Message this team', message) : null,
+      sec('Organiser notes', noteBox),
+      sec('Points', pointsBox),
+      sec('Team details', edit),
+      sec('History', mini(history.map((h) => el('div', {},
+        el('span', {}, h.action, h.detail && !h.detail.startsWith('{') ? el('span', { class: 'muted small', text: ` · ${h.detail}` }) : null),
+        el('span', { text: `${h.actor.replace(/^(admin|cli|owner):/, '')} · ${fmt(h.ts)}` }))))),
+    ]);
+  }
+
+  $('#clearTeams').addEventListener('click', run(async () => {
+    const n = PEOPLE.filter((p) => p.team_id).length;
+    if (!n) throw new Error('Nobody is on a team.');
+    const typed = prompt(`Take all ${n} people off their teams? The teams, notes and points stay.\n\nType CLEAR TEAMS to confirm.`);
+    if (typed === null) return;
+    const r = await api('/api/admin/teams/clear-members', 'POST', { confirm: typed.trim() });
+    toast(`${r.count} people are teamless now`);
+    await refresh();
+    loadTeams();
+  }));
   $('#teamNew').addEventListener('submit', run(async (e) => {
     e.preventDefault();
     await api('/api/admin/teams', 'POST', Object.fromEntries(new FormData(e.currentTarget)));

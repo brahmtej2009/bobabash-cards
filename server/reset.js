@@ -7,7 +7,7 @@ const U = require('./util');
 const PHRASE = 'RESET BOBA BASH';
 
 // Order matters: children before parents.
-const TABLES = ['notice_reads', 'notices', 'handouts', 'items', 'points_log', 'help', 'schedule', 'scans', 'prs', 'cards', 'people', 'teams', 'files', 'otps', 'limits', 'log'];
+const TABLES = ['notice_reads', 'notices', 'team_notes', 'handouts', 'items', 'points_log', 'help', 'schedule', 'scans', 'prs', 'cards', 'people', 'teams', 'files', 'otps', 'limits', 'log'];
 
 function counts(db) {
   const n = (sql) => db.prepare(sql).get().n;

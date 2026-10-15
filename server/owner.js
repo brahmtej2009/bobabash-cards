@@ -8,7 +8,7 @@ module.exports = function owner(ctx) {
   // PIN check with a per-card lockout (5 wrong = 15 minutes)
   async function checkCardPin(card, pin) {
     if (card.pin_locked_until > now()) fail(429, 'This card is locked after too many wrong tries. Try again in 15 minutes.');
-    const ok = /^\d{4}$/.test(String(pin ?? '').trim()) && (await U.checkSecret(String(pin).trim(), card.pin_hash));
+    const ok = /^\d{4,8}$/.test(String(pin ?? '').trim()) && (await U.checkSecret(String(pin).trim(), card.pin_hash));
     if (!ok) {
       const fails = card.pin_fails + 1;
       if (fails >= 5) {
@@ -21,11 +21,14 @@ module.exports = function owner(ctx) {
 
   // ---------- first setup ----------
   // With a card: card number + PIN + email. Without: the email the desk registered (or a fresh signup if allowed).
-  app.post('/api/me/setup/start', wrap(async (req) => {
+  // With a card: card number + PIN (printed on it) + the email given at the desk + a password, typed twice.
+  // That's proof enough, so they're logged straight in. No card: we email a code first (there's no PIN to prove it's them).
+  app.post('/api/me/setup/start', wrap(async (req, res) => {
     U.mustLimit(db, `me-setup:${req.ip_}`, 20, 15 * 60e3);
     const email = U.cleanEmail(req.body.email);
     if (!email) fail(400, 'Add your email.');
     const password = U.cleanPassword(req.body.password);
+    if (req.body.password2 !== undefined && req.body.password2 !== req.body.password) fail(400, 'The two passwords don\'t match.');
     let person = null;
     if (req.body.card) {
       const card = core.getCard(db, U.cardId(req.body.card));
@@ -35,7 +38,14 @@ module.exports = function owner(ctx) {
       if (card.status === 'disabled') fail(400, 'This card is switched off. Talk to an organiser.');
       if (!card.person_id) fail(400, 'This card isn\'t registered to anyone yet. Find an organiser at the desk.');
       person = core.getPerson(db, card.person_id);
-      if (person.email && person.email !== email) fail(400, `Use the email you gave at the desk (${mask(person.email)}).`);
+      if (person.email && person.email !== email) fail(400, `That's not the email the desk has for this card. Use the one you gave there (${mask(person.email)}).`);
+      if (person.password_hash) fail(409, 'This card is already set up. Log in instead, or reset your password.');
+      if (person.disabled) fail(400, 'This account is switched off. Talk to an organiser.');
+      if (db.prepare('SELECT 1 FROM people WHERE email = ? AND id != ?').get(email, person.id)) fail(409, 'That email is already used by someone else.');
+      db.prepare('UPDATE people SET email = ?, password_hash = ?, claimed_at = ?, pw_fails = 0, pw_locked_until = 0 WHERE id = ?').run(email, await U.hashSecret(password), now(), person.id);
+      U.audit(db, `owner:${person.id}`, 'set up their account with their card', { person: person.id, card: card.id }, email);
+      startSession(req, res, 'owner', person.id);
+      return { ok: true, done: true };
     } else {
       person = db.prepare('SELECT * FROM people WHERE email = ?').get(email);
       if (!person && U.getSettings(db).owner_signup !== '1') fail(400, 'No registration with that email. Use your card, or find the desk.');
@@ -110,6 +120,7 @@ module.exports = function owner(ctx) {
     U.mustLimit(db, `me-forgot-v:${req.ip_}`, 30, 15 * 60e3);
     const email = U.cleanEmail(req.body.email);
     const password = U.cleanPassword(req.body.password);
+    if (req.body.password2 !== undefined && req.body.password2 !== req.body.password) fail(400, 'The two passwords do not match.');
     checkOtp('reset', email, email, req.body.code);
     const p = db.prepare('SELECT * FROM people WHERE email = ?').get(email);
     if (!p) fail(400, 'Start again.');
@@ -124,6 +135,7 @@ module.exports = function owner(ctx) {
   app.post('/api/me/pin-reset', wrap(async (req, res) => {
     U.mustLimit(db, `me-pinreset:${req.ip_}`, 15, 15 * 60e3);
     const password = U.cleanPassword(req.body.password);
+    if (req.body.password2 !== undefined && req.body.password2 !== req.body.password) fail(400, 'The two passwords do not match.');
     const card = core.getCard(db, U.cardId(req.body.card));
     if (!card || !(await checkCardPin(card, req.body.pin))) fail(400, 'Card number or PIN don\'t match.');
     const p = card.person_id && core.getPerson(db, card.person_id);

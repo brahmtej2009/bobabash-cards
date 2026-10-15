@@ -37,13 +37,14 @@
         <p class="sub" id="setupHint">Card number and PIN are on your card.</p>
         <div class="row" data-only="card">
           <label class="f"><span>Card no.</span><input name="card" inputmode="numeric" autocomplete="off" maxlength="5"></label>
-          <label class="f"><span>PIN</span><input name="pin" inputmode="numeric" autocomplete="off" maxlength="4"></label>
+          <label class="f"><span>PIN</span><input name="pin" inputmode="numeric" autocomplete="off" maxlength="8"></label>
         </div>
         <label class="f" data-only="signup" hidden><span>Your name</span><input name="name" autocomplete="name" maxlength="120"></label>
-        <label class="f"><span>Email</span><input name="email" type="email" autocomplete="email" required></label>
+        <label class="f"><span>Email <small>(the one you gave at the desk)</small></span><input name="email" type="email" autocomplete="email" required></label>
         <label class="f"><span>Password <small>(8+ characters)</small></span><input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <label class="f"><span>Same password again</span><input name="password2" type="password" autocomplete="new-password" minlength="8" required></label>
         <p class="err" role="alert"></p>
-        <button class="btn" type="submit">Send me a code</button>
+        <button class="btn" type="submit" id="setupBtn">Set up and log in</button>
         <div class="alt"><a href="#login">I already set up</a></div>
       </form>
 
@@ -68,15 +69,17 @@
           <p class="sub">If that email has an account, a code is on its way.</p>
           <label class="f"><span>6-digit code</span><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></label>
           <label class="f"><span>New password</span><input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <label class="f"><span>Same password again</span><input name="password2" type="password" autocomplete="new-password" minlength="8" required></label>
           <p class="err" role="alert"></p>
           <button class="btn" type="submit">Save and log in</button>
         </form>
         <form id="forgotPin" hidden>
           <div class="row">
             <label class="f"><span>Card no.</span><input name="card" inputmode="numeric" maxlength="5" required></label>
-            <label class="f"><span>PIN</span><input name="pin" inputmode="numeric" maxlength="4" required></label>
+            <label class="f"><span>PIN</span><input name="pin" inputmode="numeric" maxlength="8" required></label>
           </div>
           <label class="f"><span>New password</span><input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <label class="f"><span>Same password again</span><input name="password2" type="password" autocomplete="new-password" minlength="8" required></label>
           <p class="err" role="alert"></p>
           <button class="btn" type="submit">Save and log in</button>
         </form>
@@ -251,6 +254,7 @@
           <span class="k">Change password</span>
           <label class="f"><span>Current password</span><input name="current" type="password" autocomplete="current-password" required></label>
           <label class="f"><span>New password</span><input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <label class="f"><span>Same password again</span><input name="password2" type="password" autocomplete="new-password" minlength="8" required></label>
           <p class="err" role="alert"></p>
           <button class="btn sm" type="submit">Change password</button>
         </form>
