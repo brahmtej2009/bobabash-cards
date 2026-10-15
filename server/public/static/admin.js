@@ -437,6 +437,19 @@
       el('button', { class: `btn ${p.checked_in_at ? '' : 'accent'}`, type: 'button', text: p.checked_in_at ? `Here since ${hm(p.checked_in_at)} · undo` : 'Check in', onclick: run(async () => reopenPerson(p.id, await api(`/api/admin/people/${p.id}/checkin`, 'POST', { on: !p.checked_in_at }))) }),
       admin ? el('button', { class: 'btn', type: 'button', text: 'Message', onclick: () => { notifyPeople = [p.id]; closeDrawer(); go('notify'); $('#nKind').value = 'people'; renderNotifyTarget(); $('#nForm').title.focus(); } }) : null,
       d.profile_url ? el('a', { class: 'btn', href: `/p/${p.id}`, target: '_blank', rel: 'noopener', text: 'Profile' }) : null,
+      el('button', { class: 'btn', type: 'button', text: 'Reset password', onclick: run(async () => {
+        const v = prompt(`New password for ${p.name} (8+ characters).\nLeave it empty to make one up.`);
+        if (v === null) return;
+        if (v && v.length < 8) throw new Error('Passwords need at least 8 characters.');
+        const r = await api(`/api/admin/people/${p.id}/password`, 'POST', { password: v });
+        renderPersonDrawer(r.full);
+        const login = p.email || (d.cards[0] ? `card ${d.cards[0].id}` : 'their email');
+        $('#dBody').prepend(el('div', { class: 'reveal' },
+          `${p.name} can log in with ${login} and `, r.password ? ['the password ', el('b', { text: r.password }), ' (shown once).'] : 'the password you just set.',
+          ' They were logged out everywhere.'));
+        toast('Password set');
+        await refresh();
+      }) }),
     );
 
     const f = (name, label, value, attrs = {}) => el('label', { class: 'field' }, el('span', { text: label }), el('input', { name, value: value ?? '', disabled: !admin, ...attrs }));
