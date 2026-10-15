@@ -57,4 +57,4 @@ bash deploy/setup-server.sh   # once: user, service, `cards` command, nightly ba
 bash deploy/sync.sh           # every change
 ```
 
-Then in the container: fill `/etc/cards.env` (Gmail app password, GitHub token), `systemctl restart cards`, `cards admin add you@email.com --set`. The tunnel points the dashboard domain at `http://localhost:3002`. Run `cards` for every terminal command.
+Then in the container: fill `/etc/cards.env` (Gmail app password, GitHub token), `systemctl restart cards`, `cards admin add you@email.com --set`. nginx serves HTTPS on 3002 with the Cloudflare origin cert in `/certs` (node runs on 127.0.0.1:3102). The tunnel points the dashboard domain at `https://localhost:3002` with No TLS Verify. Run `cards` for every terminal command.

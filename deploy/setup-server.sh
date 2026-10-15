@@ -15,7 +15,7 @@ chmod 750 /var/lib/cards
 if [ ! -f /etc/cards.env ]; then
   umask 077
   cat > /etc/cards.env <<'ENV'
-CARDS_PORT=3002
+CARDS_PORT=3102
 CARDS_HOST=127.0.0.1
 DATA_DIR=/var/lib/cards
 # Gmail: an App Password (Google account > Security > App passwords), not the real password.
