@@ -1,8 +1,7 @@
 // /api/me: everything a person at the event does on their own laptop or phone.
 module.exports = function owner(ctx) {
-  const { app, db, U, core, wrap, startSession, endSession, needOwner, sendOtp, checkOtp, saveUpload, deleteFile, tapStats, noticeVisible, publicInfo, sync } = ctx;
+  const { app, db, U, core, wrap, startSession, endSession, needOwner, sendOtp, checkOtp, tapStats, noticeVisible, publicInfo, sync } = ctx;
   const { now, fail } = U;
-  const { cleanProfile } = require('./profile');
   const mask = (e) => e.replace(/^(.)(.*)(@.*)$/, (_, a, b, c) => a + '*'.repeat(Math.min(b.length, 6)) + c);
 
   // PIN check with a per-card lockout (5 wrong = 15 minutes)
@@ -157,6 +156,42 @@ module.exports = function owner(ctx) {
     return { ok: true };
   }));
 
+  // ---------- live: one event stream per open dashboard ----------
+  // 'notice' = a message for them just went out (shown + ding), 'refresh' = something about them changed.
+  const streams = new Map(); // person id -> Set(res)
+  const send = (res, event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  app.get('/api/me/stream', (req, res, next) => {
+    let p;
+    try { p = needOwner(req); } catch (e) { return next(e); }
+    const mine = streams.get(p.id) || new Set();
+    if (mine.size >= 6) return res.status(429).json({ error: 'Too many open tabs.' });
+    res.set({ 'content-type': 'text/event-stream', 'cache-control': 'no-store', 'x-accel-buffering': 'no', connection: 'keep-alive' });
+    res.flushHeaders();
+    res.write('retry: 5000\n\n');
+    mine.add(res);
+    streams.set(p.id, mine);
+    // comments keep nginx and Cloudflare from closing an idle stream
+    const beat = setInterval(() => res.write(': hi\n\n'), 25000);
+    req.on('close', () => {
+      clearInterval(beat);
+      mine.delete(res);
+      if (!mine.size) streams.delete(p.id);
+    });
+  });
+  ctx.bus.on('notice', (n) => {
+    for (const [pid, set] of streams) {
+      const p = core.getPerson(db, pid);
+      if (!p || p.disabled || !noticeVisible(n, p)) continue;
+      for (const res of set) send(res, 'notice', { id: n.id, ts: n.ts, title: n.title, body: n.body, urgent: !!n.urgent, read: false });
+    }
+  });
+  ctx.bus.on('person', (pid, what) => {
+    for (const res of streams.get(Number(pid)) || []) send(res, 'refresh', { what });
+  });
+  ctx.bus.on('everyone', (what) => {
+    for (const set of streams.values()) for (const res of set) send(res, 'refresh', { what });
+  });
+
   // ---------- the whole dashboard in one call ----------
   function view(p) {
     const s = U.getSettings(db);
@@ -171,9 +206,8 @@ module.exports = function owner(ctx) {
       };
     });
     const team = p.team_id ? db.prepare('SELECT * FROM teams WHERE id = ?').get(p.team_id) : null;
-    const members = team ? db.prepare('SELECT id, name, github, profile, points FROM people WHERE team_id = ? AND disabled = 0 ORDER BY name').all(team.id).map((m) => ({
+    const members = team ? db.prepare('SELECT id, name, github, points FROM people WHERE team_id = ? AND disabled = 0 ORDER BY name').all(team.id).map((m) => ({
       id: m.id, name: m.name, github: m.github, me: m.id === p.id, points: m.points,
-      profile: m.profile ? U.profileUrl(s, m.id) : null,
       cards: core.cardsOf(db, m.id).map((c) => c.id),
     })) : [];
     const read = new Set(db.prepare('SELECT notice_id FROM notice_reads WHERE person_id = ?').all(p.id).map((r) => r.notice_id));
@@ -186,8 +220,6 @@ module.exports = function owner(ctx) {
       id: p.id, name: p.name, email: p.email, github: p.github, tags: U.tagsOf(p),
       checked_in_at: p.checked_in_at, points: p.points,
       mode: p.mode, custom_url: p.custom_url || '', splash_msg: p.splash_msg || '',
-      profile: U.parseJson(p.profile, null),
-      profile_url: U.profileUrl(s, p.id), preview_url: `/p/${p.id}`,
       cards, locked: lockedAll,
       unlock_at: s.lock_on === '1' ? Number(s.unlock_at || 0) || null : null,
       team: team ? { name: team.name, color: team.color, place: team.place, note: team.note, points: team.points + members.reduce((a, m) => a + m.points, 0), members } : null,
@@ -211,15 +243,11 @@ module.exports = function owner(ctx) {
     U.mustLimit(db, `me-dest:${p.id}`, 60, 3600e3);
     const mode = req.body.mode;
     if (mode === 'project') db.prepare("UPDATE people SET mode = 'project' WHERE id = ?").run(p.id);
-    else if (mode === 'profile') {
-      if (s.allow_profiles !== '1') fail(400, 'Profiles are turned off right now.');
-      if (!p.profile) fail(400, 'Make your profile first, under Profile.');
-      db.prepare("UPDATE people SET mode = 'profile' WHERE id = ?").run(p.id);
-    } else if (mode === 'custom') {
+    else if (mode === 'custom') {
       const url = U.cleanUrl(req.body.url);
       if (!url) fail(400, 'Paste a link first.');
       db.prepare("UPDATE people SET mode = 'custom', custom_url = ? WHERE id = ?").run(url, p.id);
-    } else fail(400, 'Pick project, profile or a link.');
+    } else fail(400, 'Pick your project or a link.');
     U.audit(db, `owner:${p.id}`, `pointed their card to ${mode}`, { person: p.id }, mode === 'custom' ? U.cleanUrl(req.body.url) : null);
     sync();
     return view(core.getPerson(db, p.id));
@@ -232,28 +260,6 @@ module.exports = function owner(ctx) {
     U.audit(db, `owner:${p.id}`, 'changed splash line', { person: p.id }, msg);
     sync();
     return view(core.getPerson(db, p.id));
-  }));
-
-  app.post('/api/me/profile', wrap((req) => {
-    const p = needOwner(req);
-    U.mustLimit(db, `me-profile:${p.id}`, 60, 3600e3);
-    const prof = cleanProfile(req.body.profile, p);
-    const old = U.parseJson(p.profile, {});
-    if (prof.avatar && !db.prepare('SELECT 1 FROM files WHERE id = ? AND person_id = ?').get(prof.avatar, p.id)) prof.avatar = '';
-    if (old.avatar && old.avatar !== prof.avatar) deleteFile(old.avatar);
-    db.prepare('UPDATE people SET profile = ? WHERE id = ?').run(JSON.stringify(prof), p.id);
-    U.audit(db, `owner:${p.id}`, 'saved profile', { person: p.id });
-    sync();
-    return view(core.getPerson(db, p.id));
-  }));
-
-  app.post('/api/me/avatar', wrap((req) => {
-    const p = needOwner(req);
-    U.mustLimit(db, `me-avatar:${p.id}`, 20, 3600e3);
-    if (req.body?.length > 3 * 1024 * 1024) fail(413, 'Keep the photo under 3 MB.');
-    const f = saveUpload(req, `owner:${p.id}`, p.id);
-    if (!f.mime.startsWith('image/')) { deleteFile(f.id); fail(415, 'The photo has to be PNG, JPG, WebP or GIF.'); }
-    return f;
   }));
 
   app.get('/api/me/stats', wrap((req) => {

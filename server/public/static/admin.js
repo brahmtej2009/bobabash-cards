@@ -1092,7 +1092,7 @@
     $('#announcement').value = s.announcement;
     $('#wallNote').value = s.wall_note;
     for (const k of ['event_name', 'splash_ms', 'inactive_url']) ctl(k).value = s[k];
-    for (const k of ['allow_profiles', 'help_open', 'owner_signup']) ctl(k).checked = s[k] === '1';
+    for (const k of ['help_open', 'owner_signup']) ctl(k).checked = s[k] === '1';
   }
   ctl('override_on').addEventListener('change', run(async (e) => {
     const on = e.target.checked;
@@ -1119,7 +1119,7 @@
   $('#saveMessages').addEventListener('click', run(() => saveSettings({ announcement: $('#announcement').value, wall_note: $('#wallNote').value })));
   $('#saveBehaviour').addEventListener('click', run(() => saveSettings({
     event_name: ctl('event_name').value, splash_ms: ctl('splash_ms').value, inactive_url: ctl('inactive_url').value,
-    allow_profiles: ctl('allow_profiles').checked, help_open: ctl('help_open').checked, owner_signup: ctl('owner_signup').checked,
+    help_open: ctl('help_open').checked, owner_signup: ctl('owner_signup').checked,
   })));
 
   // ================= setup =================

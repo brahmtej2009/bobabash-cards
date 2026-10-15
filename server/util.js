@@ -112,7 +112,7 @@ const DEFAULT_SETTINGS = {
   override_from: '',
   override_until: '',
   tag_overrides: '{}',
-  allow_profiles: '1',
+  allow_profiles: '0', // profile pages were removed; kept so old databases read cleanly
   last_pr_sync: '0',
   last_publish: '0',
   last_publish_error: '',
@@ -170,7 +170,6 @@ function resolve(card, person, s, t = now()) {
   for (const tag of tagsOf(person)) if (tagRules[tag]) return { kind: 'go', url: tagRules[tag], reason: `tag:${tag}`, msg };
   if (!cardLocked(card, s)) {
     if (person.mode === 'custom' && person.custom_url) return { kind: 'go', url: person.custom_url, reason: 'custom', msg };
-    if (person.mode === 'profile' && person.profile && s.allow_profiles === '1') return { kind: 'go', url: profileUrl(s, person.id), reason: 'profile', msg };
   }
   return { kind: 'go', url: projectUrl(s, card.id), reason: 'project', msg };
 }

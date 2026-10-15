@@ -5,6 +5,18 @@ module.exports = function admin(ctx) {
   const { now, fail, HttpError } = U;
   const IST = 19800000;
 
+  // Any organiser change (check-in, team, schedule, card, help reply...) nudges open people dashboards to reload
+  // their view. Batched: a burst of changes becomes one nudge.
+  let nudge = null;
+  app.use('/api/admin', (req, res, next) => {
+    if (req.method !== 'GET') res.on('finish', () => {
+      if (res.statusCode >= 400) return;
+      clearTimeout(nudge);
+      nudge = setTimeout(() => ctx.bus.emit('everyone', 'update'), 2000);
+    });
+    next();
+  });
+
   // ---------- auth ----------
   app.post('/api/admin/login', wrap(async (req, res) => {
     U.mustLimit(db, `admin-login:${req.ip_}`, 20, 15 * 60e3);
@@ -183,7 +195,7 @@ module.exports = function admin(ctx) {
     const b = req.body || {};
     core.updatePerson(db, id, b, req.actor, { allowDupes: !!b.allow_dupes });
     const set = {};
-    if ('mode' in b) { if (!['project', 'profile', 'custom'].includes(b.mode)) fail(400, 'Bad mode.'); set.mode = b.mode; }
+    if ('mode' in b) { if (!['project', 'custom'].includes(b.mode)) fail(400, 'Bad mode.'); set.mode = b.mode; }
     if ('custom_url' in b) set.custom_url = U.cleanUrl(b.custom_url) || null;
     if ('splash_msg' in b) set.splash_msg = U.cleanText(b.splash_msg, 60) || null;
     if ('disabled' in b) { set.disabled = b.disabled ? 1 : 0; if (b.disabled) core.killSessions(db, id); }
@@ -611,6 +623,7 @@ module.exports = function admin(ctx) {
     const id = Number(db.prepare('INSERT INTO notices (ts, title, body, target_kind, target, urgent, emailed, by) VALUES (?, ?, ?, ?, ?, ?, 0, ?)')
       .run(now(), title, body, b.target_kind, target, b.urgent ? 1 : 0, req.actor).lastInsertRowid);
     U.audit(db, req.actor, 'sent notification', b.target_kind === 'team' ? { team: Number(target) } : {}, `${title} → ${to.length} people`);
+    ctx.bus.emit('notice', db.prepare('SELECT * FROM notices WHERE id = ?').get(id));
     let emailing = 0;
     if (b.email) {
       const s = U.getSettings(db);
