@@ -183,9 +183,20 @@ CREATE TABLE IF NOT EXISTS log (
   action    TEXT NOT NULL,
   card_id   INTEGER,
   person_id INTEGER,
+  team_id   INTEGER,
   detail    TEXT
 );
 CREATE INDEX IF NOT EXISTS log_card ON log(card_id, ts);
+CREATE INDEX IF NOT EXISTS log_team ON log(team_id, ts);
+
+-- organisers' own notes on a team, newest first
+CREATE TABLE IF NOT EXISTS team_notes (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  ts      INTEGER NOT NULL,
+  by      TEXT,
+  text    TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS log_person ON log(person_id, ts);
 
 CREATE TABLE IF NOT EXISTS prs (

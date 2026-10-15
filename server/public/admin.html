@@ -77,25 +77,29 @@
               <label class="field"><span>Email</span><input name="email" type="email" autocomplete="off"></label>
               <label class="field"><span>Phone</span><input name="phone" autocomplete="off"></label>
               <label class="field"><span>GitHub</span><input name="github" autocomplete="off" placeholder="username"></label>
-              <label class="field"><span>Team</span><select name="team_id" id="regTeam"></select></label>
-              <label class="field span2"><span>Tags</span><input name="tags" autocomplete="off" placeholder="attendee"></label>
+              <label class="field"><span>Tags</span><input name="tags" autocomplete="off" placeholder="attendee"></label>
               <div class="span2 quicktags" id="quickTags"></div>
               <label class="field span2"><span>Note (organisers only)</span><input name="note" autocomplete="off"></label>
             </div>
             <div class="cardpick">
-              <span class="lbl">Card</span>
-              <label class="check"><input type="radio" name="cardmode" value="next" checked> Next card <b id="nextCard"></b></label>
-              <label class="check"><input type="radio" name="cardmode" value="number"> Card no. <input name="card" inputmode="numeric" class="w-id" autocomplete="off"></label>
-              <label class="check"><input type="radio" name="cardmode" value="none"> No card</label>
+              <div class="inline wrap">
+                <span class="lbl">Card</span>
+                <label class="check"><input type="radio" name="cardmode" value="card" checked> Give a card</label>
+                <label class="check"><input type="radio" name="cardmode" value="none"> No card for now</label>
+              </div>
+              <div class="grid two cardfields" id="cardFields">
+                <label class="field"><span>Card number <button class="linkbtn" type="button" id="useNext">use next free</button></span><input name="card" inputmode="numeric" autocomplete="off" maxlength="5"></label>
+                <label class="field"><span>PIN printed on that card</span><input name="pin" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="4 to 8 digits"></label>
+              </div>
+              <p class="muted small" id="regHint"></p>
             </div>
             <div class="inline wrap opts">
               <label class="check"><input type="checkbox" name="checkin" checked> Check in now</label>
-              <label class="check"><input type="checkbox" name="new_pin"> New PIN for a pre-printed card</label>
               <label class="check" data-admin><input type="checkbox" name="allow_dupes"> Allow duplicate phone / GitHub</label>
             </div>
             <div class="inline wrap opts" id="regItems"></div>
             <p class="err"></p>
-            <div class="actions"><button class="btn accent big" type="submit">Register</button><span class="muted small" id="regHint"></span></div>
+            <div class="actions"><button class="btn accent big" type="submit">Register</button></div>
           </form>
           <div>
             <div class="block result" id="regResult" hidden>
@@ -158,7 +162,7 @@
 
       <!-- ===== teams ===== -->
       <section data-page="teams" hidden>
-        <div class="head"><h2>Teams</h2></div>
+        <div class="head"><h2>Teams</h2><span class="muted small" id="teamsSummary"></span><button class="btn danger sm" id="clearTeams" data-admin>Clear everyone's teams</button></div>
         <div class="grid two">
           <form class="block" id="teamNew" data-admin>
             <h3>New team</h3>
@@ -265,7 +269,26 @@
 
       <!-- ===== cards ===== -->
       <section data-page="cards" hidden>
-        <div class="head"><h2>Cards</h2></div>
+        <div class="head"><h2>Cards</h2><span class="muted small">Click a card to control it: holder, PIN, routing, on/off.</span></div>
+        <div class="grid two" data-admin>
+          <form class="block" id="cardAdd">
+            <h3>Add a printed card</h3>
+            <div class="inline">
+              <input name="id" inputmode="numeric" placeholder="Card ID" class="w-tag" required>
+              <input name="pin" inputmode="numeric" placeholder="PIN" maxlength="8" class="w-tag" required>
+              <button class="btn primary" type="submit">Add</button>
+            </div>
+            <p class="muted small">Not given to anyone yet. Give it from the Desk or the card's panel.</p>
+          </form>
+          <form class="block" id="cardImport">
+            <h3>Add many printed cards</h3>
+            <textarea name="text" rows="3" placeholder="One card per line: ID,PIN&#10;1,4821&#10;2,9037"></textarea>
+            <div class="inline wrap opts">
+              <label class="check"><input type="checkbox" name="overwrite"> Update the PIN of cards that already exist</label>
+              <button class="btn" type="submit">Import</button>
+            </div>
+          </form>
+        </div>
         <div class="bar">
           <input id="cSearch" placeholder="Card number or holder" class="search">
           <div class="seg" id="cFilter">

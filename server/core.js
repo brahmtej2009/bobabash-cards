@@ -8,6 +8,15 @@ const phoneDigits = (p) => String(p || '').replace(/\D/g, '').slice(-10) || '';
 const cleanTags = (v) => [...new Set(String(Array.isArray(v) ? v.join(',') : v ?? '').split(',').map((t) => t.trim().toLowerCase().replace(/[^a-z0-9 _-]/g, '')).filter(Boolean))].slice(0, 12).join(',');
 const nextCardId = (db) => (db.prepare('SELECT MAX(id) AS m FROM cards').get().m || 0) + 1;
 
+// The number the desk hands out next: the smallest card nobody holds yet
+// (a printed card already in the system, or one that isn't in it yet). Switched-off cards are skipped.
+function nextFreeCard(db) {
+  const taken = new Set(db.prepare("SELECT id FROM cards WHERE person_id IS NOT NULL OR status = 'disabled'").all().map((r) => r.id));
+  let n = 1;
+  while (taken.has(n)) n++;
+  return n;
+}
+
 const getPerson = (db, id) => db.prepare('SELECT * FROM people WHERE id = ?').get(Number(id));
 const getCard = (db, id) => db.prepare('SELECT * FROM cards WHERE id = ?').get(Number(id));
 const cardsOf = (db, personId) => db.prepare('SELECT * FROM cards WHERE person_id = ? ORDER BY id').all(personId);
@@ -79,17 +88,37 @@ function updatePerson(db, id, input, actor, { allowDupes = false } = {}) {
   const keys = Object.keys(f);
   if (!keys.length) return p;
   db.prepare(`UPDATE people SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map((k) => f[k]), p.id);
-  U.audit(db, actor, 'edited person', { person: p.id }, f);
+  const teamMoved = 'team_id' in f && (f.team_id ?? null) !== (p.team_id ?? null);
+  const rest = { ...f };
+  delete rest.team_id;
+  if (Object.keys(rest).length) U.audit(db, actor, 'edited person', { person: p.id }, rest);
+  if (teamMoved) {
+    const name = (tid) => db.prepare('SELECT name FROM teams WHERE id = ?').get(tid)?.name || `team ${tid}`;
+    if (p.team_id) U.audit(db, actor, `left ${name(p.team_id)}`, { person: p.id, team: p.team_id }, p.name);
+    if (f.team_id) U.audit(db, actor, `joined ${name(f.team_id)}`, { person: p.id, team: f.team_id }, p.name);
+  }
   return getPerson(db, p.id);
 }
 
-// Give a person a card. cardId empty = make the next number. A card that exists keeps its printed PIN
-// unless newPin. A second card for the same person only with allowSecond.
-async function issueCard(db, personId, { cardId, newPin = false, allowSecond = false, replace = false } = {}, actor) {
+// PINs are printed on the cards; organisers can also pick their own. 4 to 8 digits.
+function cleanPin(v) {
+  const s = String(v ?? '').trim();
+  if (!/^\d{4,8}$/.test(s)) fail(400, 'A PIN is 4 to 8 digits.');
+  return s;
+}
+
+async function setPinHash(db, id, pin) {
+  db.prepare('UPDATE cards SET pin_hash = ?, pin_fails = 0, pin_locked_until = 0 WHERE id = ?').run(await U.hashSecret(pin), id);
+}
+
+// Give a person a card. cardId empty = the next number. pin = the PIN printed on the card (or one you choose);
+// without it a new card gets a random PIN and an existing card keeps the one it has (unless newPin).
+// A second card for the same person only with allowSecond.
+async function issueCard(db, personId, { cardId, pin: wanted, newPin = false, allowSecond = false, replace = false } = {}, actor) {
   const person = mustPerson(db, personId);
   const held = cardsOf(db, person.id);
   if (held.length && !allowSecond) fail(409, `${person.name} already has card ${held.map((c) => c.id).join(', ')}. Tick "allow a second card" to give another.`);
-  const id = cardId ? U.cardId(cardId) : nextCardId(db);
+  const id = cardId ? U.cardId(cardId) : nextFreeCard(db);
   let card = getCard(db, id);
   if (card && card.person_id && card.person_id !== person.id) {
     if (!replace) {
@@ -98,16 +127,25 @@ async function issueCard(db, personId, { cardId, newPin = false, allowSecond = f
     }
     U.audit(db, actor, 'took card from previous holder', { card: id, person: card.person_id });
   }
-  let pin = null;
-  if (!card || newPin) {
-    pin = U.randomDigits(4);
-    const hash = await U.hashSecret(pin);
-    if (!card) db.prepare('INSERT INTO cards (id, pin_hash, created_at) VALUES (?, ?, ?)').run(id, hash, now());
-    else db.prepare('UPDATE cards SET pin_hash = ?, pin_fails = 0, pin_locked_until = 0 WHERE id = ?').run(hash, id);
-  }
+  const pinGiven = wanted != null && String(wanted).trim() !== '';
+  const pin = pinGiven ? cleanPin(wanted) : !card || newPin ? U.randomDigits(4) : null;
+  if (!card) db.prepare('INSERT INTO cards (id, pin_hash, created_at) VALUES (?, ?, ?)').run(id, await U.hashSecret(pin), now());
+  else if (pin) await setPinHash(db, id, pin);
   db.prepare("UPDATE cards SET person_id = ?, status = 'active', linked_at = ? WHERE id = ?").run(person.id, now(), id);
-  U.audit(db, actor, card ? 'gave card' : 'made and gave card', { card: id, person: person.id }, person.name);
-  return { id, pin, made: !card };
+  U.audit(db, actor, card ? 'gave card' : 'made and gave card', { card: id, person: person.id }, `${person.name}${pinGiven ? ', PIN as printed' : ''}`);
+  return { id, pin, made: !card, pin_from_card: pinGiven };
+}
+
+// Wrong card handed out, or a lost one replaced: move the person from one card number to another.
+async function swapCard(db, personId, fromId, toId, pin, actor) {
+  const person = mustPerson(db, personId);
+  const from = mustCard(db, fromId);
+  if (from.person_id !== person.id) fail(400, `Card ${from.id} isn't ${person.name}'s.`);
+  if (Number(toId) === from.id) fail(400, 'That\'s the same card.');
+  const r = await issueCard(db, person.id, { cardId: toId, pin, allowSecond: true }, actor);
+  unlinkCard(db, from.id, actor);
+  U.audit(db, actor, `moved from card ${from.id} to card ${r.id}`, { person: person.id, card: r.id });
+  return r;
 }
 
 function unlinkCard(db, cardId, actor) {
@@ -116,12 +154,46 @@ function unlinkCard(db, cardId, actor) {
   U.audit(db, actor, 'took card back', { card: c.id, person: c.person_id });
 }
 
-async function newPin(db, id, actor) {
+// pin given = set exactly that; empty = a random one. Returns the PIN.
+async function newPin(db, id, actor, wanted) {
   const c = mustCard(db, id);
-  const pin = U.randomDigits(4);
-  db.prepare('UPDATE cards SET pin_hash = ?, pin_fails = 0, pin_locked_until = 0 WHERE id = ?').run(await U.hashSecret(pin), c.id);
-  U.audit(db, actor, 'issued a new PIN', { card: c.id, person: c.person_id });
+  const chosen = wanted != null && String(wanted).trim() !== '';
+  const pin = chosen ? cleanPin(wanted) : U.randomDigits(4);
+  await setPinHash(db, c.id, pin);
+  U.audit(db, actor, chosen ? 'set the PIN' : 'issued a new PIN', { card: c.id, person: c.person_id });
   return pin;
+}
+
+// A pre-printed card from the box, not given to anyone yet.
+async function addCard(db, id, pin, actor) {
+  id = U.cardId(id);
+  pin = cleanPin(pin);
+  if (getCard(db, id)) fail(409, `Card ${id} already exists. Change its PIN from the card's panel.`);
+  db.prepare('INSERT INTO cards (id, pin_hash, created_at) VALUES (?, ?, ?)').run(id, await U.hashSecret(pin), now());
+  U.audit(db, actor, 'added a printed card', { card: id });
+  return id;
+}
+
+// Paste "card,pin" lines (commas, tabs or spaces). New cards are added; existing ones are skipped,
+// or get the pasted PIN when overwrite is on.
+async function importCards(db, text, actor, { overwrite = false } = {}) {
+  const out = { added: [], updated: [], skipped: [], errors: [] };
+  const lines = String(text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 2000);
+  for (const line of lines) {
+    const m = /^#?(\d{1,5})[\s,;\t]+(\d{4,8})$/.exec(line);
+    if (!m) { if (!/^card/i.test(line)) out.errors.push(line); continue; } // header rows are fine
+    const id = Number(m[1]);
+    if (getCard(db, id)) {
+      if (!overwrite) { out.skipped.push(id); continue; }
+      await setPinHash(db, id, m[2]);
+      out.updated.push(id);
+    } else {
+      db.prepare('INSERT INTO cards (id, pin_hash, created_at) VALUES (?, ?, ?)').run(id, await U.hashSecret(m[2]), now());
+      out.added.push(id);
+    }
+  }
+  if (out.added.length || out.updated.length) U.audit(db, actor, 'imported printed cards', {}, `${out.added.length} added, ${out.updated.length} PINs updated`);
+  return out;
 }
 
 async function makeBlankCards(db, count, actor) {
@@ -210,7 +282,7 @@ function removeAdmin(db, email, actor) {
 }
 
 module.exports = {
-  phoneDigits, cleanTags, nextCardId, getPerson, getCard, cardsOf, killSessions, mustPerson, mustCard,
-  createPerson, updatePerson, issueCard, unlinkCard, newPin, makeBlankCards, setCheckin, addPoints, deletePerson, resetAccount,
+  phoneDigits, cleanTags, nextCardId, nextFreeCard, swapCard, getPerson, getCard, cardsOf, killSessions, mustPerson, mustCard,
+  createPerson, updatePerson, cleanPin, issueCard, unlinkCard, newPin, addCard, importCards, makeBlankCards, setCheckin, addPoints, deletePerson, resetAccount,
   ROLES, randomPassword, createAdmin, setAdminPassword, removeAdmin,
 };

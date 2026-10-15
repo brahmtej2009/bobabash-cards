@@ -195,8 +195,8 @@ function mustLimit(db, key, max, windowMs, msg = 'Too many tries. Give it a few 
 // ---------- audit ----------
 // who did what. ref = { card, person } (either optional)
 function audit(db, actor, action, ref = {}, detail = null) {
-  db.prepare('INSERT INTO log (ts, actor, action, card_id, person_id, detail) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(now(), actor, action, ref?.card ?? null, ref?.person ?? null, detail == null ? null : typeof detail === 'string' ? detail : JSON.stringify(detail));
+  db.prepare('INSERT INTO log (ts, actor, action, card_id, person_id, team_id, detail) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(now(), actor, action, ref?.card ?? null, ref?.person ?? null, ref?.team ?? null, detail == null ? null : typeof detail === 'string' ? detail : JSON.stringify(detail));
 }
 
 module.exports = {

@@ -6,7 +6,7 @@ const { DatabaseSync } = require('node:sqlite');
 // Columns added after a table first shipped: { table: { column: type } }.
 // Applied before schema.sql, because the schema's indexes reference them.
 const MIGRATIONS = {
-  log: { person_id: 'INTEGER' },
+  log: { person_id: 'INTEGER', team_id: 'INTEGER' },
   files: { person_id: 'INTEGER' },
 };
 

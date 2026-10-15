@@ -328,3 +328,15 @@ nav .grp:first-child { margin-top: 0; }
 .danger-zone { border-color: #f3b6bf; background: #fff8f9; }
 .danger-zone h3 { color: #c62a3d; }
 .danger-zone .grid { gap: 10px; margin-top: 8px; }
+.team-row.click { cursor: pointer; }
+.team-row.click:hover { border-color: var(--line2); }
+.swatch-dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); }
+.notes { display: grid; gap: 6px; }
+.note { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); }
+.note p { margin: 0 0 4px; white-space: pre-line; }
+.linkbtn { border: 0; padding: 0; background: none; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
+.cardpick .cardfields { margin-top: 8px; }
+nav .grp { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11.5px; font-weight: 700; letter-spacing: .06em; color: var(--text); }
+nav .grp:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.swaprow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.swaprow input, .swaprow select { flex: none; }

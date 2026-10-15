@@ -19,8 +19,10 @@ const DEV = process.env.DEV === '1';
 const db = require('./db').open(DATA_DIR);
 fs.mkdirSync(UPLOADS, { recursive: true });
 
-const OWNER_TTL = 30 * 24 * 3600e3;
-const ADMIN_TTL = 12 * 3600e3;
+// Sessions slide: every visit pushes the expiry out again, so people only get logged out after
+// this long without opening the dashboard at all.
+const OWNER_TTL = 180 * 24 * 3600e3;
+const ADMIN_TTL = 14 * 24 * 3600e3;
 const OTP_TTL = 10 * 60e3;
 const COOKIE = { owner: '__Host-bbc_o', admin: '__Host-bbc_a' };
 const MAX_UPLOAD = 10 * 1024 * 1024;
@@ -66,18 +68,24 @@ function startSession(req, res, kind, subject) {
   const ttl = kind === 'admin' ? ADMIN_TTL : OWNER_TTL;
   db.prepare('INSERT INTO sessions (token_hash, kind, subject, expires_at, created_at, ip) VALUES (?, ?, ?, ?, ?, ?)')
     .run(U.sha256(token), kind, String(subject), now() + ttl, now(), req.ip_);
-  res.append('set-cookie', `${COOKIE[kind]}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${Math.floor(ttl / 1000)}`);
+  // browsers cap cookies at 400 days; the server-side expiry (sliding) decides when it's really over
+  res.append('set-cookie', `${COOKIE[kind]}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${400 * 86400}`);
 }
 function endSession(req, res, kind) {
   const token = cookies(req)[COOKIE[kind]];
   if (token) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(U.sha256(token));
-  res.append('set-cookie', `${COOKIE[kind]}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);
+  res.append('set-cookie', `${COOKIE[kind]}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
 }
 function session(req, kind) {
   const token = cookies(req)[COOKIE[kind]];
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
-  const row = db.prepare('SELECT * FROM sessions WHERE token_hash = ? AND kind = ?').get(U.sha256(token), kind);
-  return row && row.expires_at > now() ? row : null;
+  const hash = U.sha256(token);
+  const row = db.prepare('SELECT * FROM sessions WHERE token_hash = ? AND kind = ?').get(hash, kind);
+  if (!row || row.expires_at <= now()) return null;
+  // slide the expiry forward (at most once an hour, to keep writes down); the cookie lasts the full TTL
+  const ttl = kind === 'admin' ? ADMIN_TTL : OWNER_TTL;
+  if (row.expires_at < now() + ttl - 3600e3) db.prepare('UPDATE sessions SET expires_at = ? WHERE token_hash = ?').run(now() + ttl, hash);
+  return row;
 }
 
 function needAdmin(req, role = 'admin') {

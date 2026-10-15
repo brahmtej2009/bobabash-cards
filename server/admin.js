@@ -119,7 +119,7 @@ module.exports = function admin(ctx) {
     return {
       me, settings: s,
       global_locked: U.globalLocked(s), override_active: U.overrideActive(s),
-      next_card: core.nextCardId(db),
+      next_card: core.nextFreeCard(db),
       teams: db.prepare('SELECT t.*, (SELECT COUNT(*) FROM people p WHERE p.team_id = t.id) members, (SELECT COALESCE(SUM(points),0) FROM people p WHERE p.team_id = t.id) member_points FROM teams t ORDER BY name').all(),
       items: db.prepare('SELECT i.*, (SELECT COUNT(*) FROM handouts h WHERE h.item_id = i.id) given FROM items i ORDER BY id').all(),
       admins: db.prepare('SELECT email, name, role, added_by, added_at FROM admins ORDER BY added_at').all(),
@@ -162,7 +162,7 @@ module.exports = function admin(ctx) {
     const id = core.createPerson(db, b, req.actor, { allowDupes });
     let card = null;
     try {
-      if (b.card && b.card !== 'none') card = await core.issueCard(db, id, { cardId: b.card === 'next' ? null : b.card, newPin: !!b.new_pin, replace: !!b.replace && isAdmin }, req.actor);
+      if (b.card && b.card !== 'none') card = await core.issueCard(db, id, { cardId: b.card === 'next' ? null : b.card, pin: b.pin, newPin: !!b.new_pin, replace: !!b.replace && isAdmin }, req.actor);
     } catch (e) {
       // keep the person, tell the desk the card part failed
       if (e instanceof HttpError) return { person_id: id, card: null, card_error: e.message };
@@ -202,10 +202,34 @@ module.exports = function admin(ctx) {
     const isAdmin = req.admin.role === 'admin';
     const b = req.body || {};
     if ((b.allow_second || b.replace) && !isAdmin) fail(403, 'Only admins can give a second card or take a card from someone.');
-    const r = await core.issueCard(db, Number(req.params.id), { cardId: b.card || null, newPin: !!b.new_pin, allowSecond: !!b.allow_second, replace: !!b.replace }, req.actor);
+    const r = await core.issueCard(db, Number(req.params.id), { cardId: b.card || null, pin: b.pin, newPin: !!b.new_pin, allowSecond: !!b.allow_second, replace: !!b.replace }, req.actor);
     sync();
     const s = U.getSettings(db);
     return { ...r, url: `${s.card_base.replace(/\/$/, '')}/${r.id}`, full: personFull(Number(req.params.id)) };
+  }));
+
+  // organisers set a person's password (someone at the desk who forgot theirs). Empty = make one up, shown once.
+  app.post('/api/admin/people/:id/password', wrap(async (req) => {
+    needDesk(req);
+    const p = core.mustPerson(db, Number(req.params.id));
+    const chosen = String(req.body.password || '');
+    const pw = chosen ? U.cleanPassword(chosen) : core.randomPassword();
+    db.prepare('UPDATE people SET password_hash = ?, claimed_at = COALESCE(claimed_at, ?), pw_fails = 0, pw_locked_until = 0 WHERE id = ?').run(await U.hashSecret(pw), now(), p.id);
+    core.killSessions(db, p.id);
+    U.audit(db, req.actor, 'set their password', { person: p.id });
+    return { password: chosen ? null : pw, full: personFull(p.id) };
+  }));
+
+  // change someone's card number: from = their card now, to = the card they should have, pin = printed on it
+  app.post('/api/admin/people/:id/swap', wrap(async (req) => {
+    needDesk(req);
+    const b = req.body || {};
+    const target = core.getCard(db, Number(b.to));
+    if (target?.person_id && target.person_id !== Number(req.params.id)) fail(409, `Card ${b.to} belongs to someone else. Take it back from them first.`);
+    if (!target && !String(b.pin || '').trim()) fail(400, `Card ${b.to} is new here. Type the PIN printed on it.`);
+    const r = await core.swapCard(db, Number(req.params.id), Number(b.from), b.to, b.pin, req.actor);
+    sync();
+    return { ...r, full: personFull(Number(req.params.id)) };
   }));
 
   app.post('/api/admin/people/:id/checkin', wrap((req) => {
@@ -330,9 +354,30 @@ module.exports = function admin(ctx) {
     sync();
     return { made };
   }));
+  // pre-printed cards from the box: one, or a pasted list of "card,pin" lines
+  app.post('/api/admin/cards', wrap(async (req) => {
+    needAdmin(req);
+    const id = await core.addCard(db, req.body.id, req.body.pin, req.actor);
+    sync();
+    return { id };
+  }));
+  app.post('/api/admin/cards/import', wrap(async (req) => {
+    needAdmin(req);
+    const r = await core.importCards(db, req.body.text, req.actor, { overwrite: !!req.body.overwrite });
+    sync();
+    return r;
+  }));
+  app.post('/api/admin/cards/:id/give', wrap(async (req) => {
+    needDesk(req);
+    const b = req.body || {};
+    if ((b.allow_second || b.replace) && req.admin.role !== 'admin') fail(403, 'Only admins can give a second card or take a card from someone.');
+    const r = await core.issueCard(db, Number(b.person_id), { cardId: Number(req.params.id), pin: b.pin, allowSecond: !!b.allow_second, replace: !!b.replace }, req.actor);
+    sync();
+    return r;
+  }));
   app.post('/api/admin/cards/:id/pin', wrap(async (req) => {
     needAdmin(req);
-    return { id: Number(req.params.id), pin: await core.newPin(db, Number(req.params.id), req.actor) };
+    return { id: Number(req.params.id), pin: await core.newPin(db, Number(req.params.id), req.actor, req.body?.pin) };
   }));
   app.post('/api/admin/cards/:id/unlock', wrap((req) => {
     needDesk(req);
@@ -376,38 +421,116 @@ module.exports = function admin(ctx) {
     if ('note' in b) f.note = String(b.note || '').replace(/\r/g, '').slice(0, 1000) || null;
     return f;
   };
+  const getTeam = (id) => {
+    const t = db.prepare('SELECT * FROM teams WHERE id = ?').get(Number(id));
+    if (!t) fail(404, 'No such team.');
+    return t;
+  };
+  const teamMembers = (id) => db.prepare('SELECT id, name, email, github, points, checked_in_at, tags FROM people WHERE team_id = ? ORDER BY name').all(id)
+    .map((m) => ({ ...m, tags: U.tagsOf(m), cards: core.cardsOf(db, m.id).map((c) => c.id) }));
   app.get('/api/admin/teams', wrap((req) => {
     needDesk(req);
-    return { teams: db.prepare('SELECT * FROM teams ORDER BY name').all().map((t) => ({ ...t, members: db.prepare('SELECT id, name, points, checked_in_at FROM people WHERE team_id = ? ORDER BY name').all(t.id) })) };
+    return {
+      teams: db.prepare('SELECT * FROM teams ORDER BY name').all().map((t) => ({
+        ...t,
+        members: teamMembers(t.id),
+        notes: db.prepare('SELECT COUNT(*) n FROM team_notes WHERE team_id = ?').get(t.id).n,
+      })),
+      unassigned: db.prepare('SELECT COUNT(*) n FROM people WHERE team_id IS NULL AND disabled = 0').get().n,
+    };
+  }));
+  // one team in full: members, organiser notes, history, messages sent to it
+  app.get('/api/admin/teams/:id', wrap((req) => {
+    needDesk(req);
+    const t = getTeam(req.params.id);
+    return {
+      team: t,
+      members: teamMembers(t.id),
+      notes: db.prepare('SELECT * FROM team_notes WHERE team_id = ? ORDER BY ts DESC').all(t.id),
+      history: db.prepare('SELECT l.ts, l.actor, l.action, l.detail, l.person_id, p.name person_name FROM log l LEFT JOIN people p ON p.id = l.person_id WHERE l.team_id = ? ORDER BY l.ts DESC LIMIT 200').all(t.id),
+      notices: db.prepare("SELECT id, ts, title, body, urgent, by FROM notices WHERE target_kind = 'team' AND target = ? ORDER BY ts DESC").all(String(t.id))
+        .map((n) => ({ ...n, reads: db.prepare('SELECT COUNT(*) n FROM notice_reads r JOIN people p ON p.id = r.person_id WHERE r.notice_id = ? AND p.team_id = ?').get(n.id, t.id).n })),
+      points: db.prepare('SELECT * FROM points_log WHERE team_id = ? ORDER BY ts DESC LIMIT 50').all(t.id),
+    };
   }));
   app.post('/api/admin/teams', wrap((req) => {
     needAdmin(req);
     const f = teamFields({ name: '', ...req.body });
     const id = Number(db.prepare('INSERT INTO teams (name, color, place, note, created_at) VALUES (?, ?, ?, ?, ?)').run(f.name, f.color ?? null, f.place ?? null, f.note ?? null, now()).lastInsertRowid);
-    U.audit(db, req.actor, 'made team', {}, f.name);
+    U.audit(db, req.actor, 'made the team', { team: id }, f.name);
     return { id };
   }));
   app.patch('/api/admin/teams/:id', wrap((req) => {
     needAdmin(req);
+    const t = getTeam(req.params.id);
     const f = teamFields(req.body || {});
-    const keys = Object.keys(f);
-    if (keys.length) db.prepare(`UPDATE teams SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map((k) => f[k]), Number(req.params.id));
-    U.audit(db, req.actor, 'edited team', {}, f);
+    const keys = Object.keys(f).filter((k) => (f[k] ?? null) !== (t[k] ?? null));
+    if (keys.length) {
+      db.prepare(`UPDATE teams SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map((k) => f[k]), t.id);
+      U.audit(db, req.actor, 'edited the team', { team: t.id }, Object.fromEntries(keys.map((k) => [k, f[k]])));
+    }
     return { ok: true };
   }));
   app.delete('/api/admin/teams/:id', wrap((req) => {
     needAdmin(req);
-    const t = db.prepare('SELECT * FROM teams WHERE id = ?').get(Number(req.params.id));
-    if (!t) fail(404, 'No such team.');
-    db.prepare('UPDATE people SET team_id = NULL WHERE team_id = ?').run(t.id);
+    const t = getTeam(req.params.id);
+    const n = db.prepare('UPDATE people SET team_id = NULL WHERE team_id = ?').run(t.id).changes;
     db.prepare('DELETE FROM teams WHERE id = ?').run(t.id);
-    U.audit(db, req.actor, 'deleted team', {}, t.name);
+    U.audit(db, req.actor, 'deleted team', { team: t.id }, `${t.name}, ${n} people left without a team`);
     return { ok: true };
   }));
   app.post('/api/admin/teams/:id/points', wrap((req) => {
     needAdmin(req);
-    core.addPoints(db, { teamId: Number(req.params.id) }, req.body.delta, req.body.reason, req.actor);
+    const t = getTeam(req.params.id);
+    core.addPoints(db, { teamId: t.id }, req.body.delta, req.body.reason, req.actor);
+    U.audit(db, req.actor, `team ${Number(req.body.delta) > 0 ? 'got' : 'lost'} ${Math.abs(Math.round(Number(req.body.delta)))} points`, { team: t.id }, U.cleanText(req.body.reason, 120) || null);
     return { ok: true };
+  }));
+  app.post('/api/admin/teams/:id/notes', wrap((req) => {
+    needDesk(req);
+    const t = getTeam(req.params.id);
+    const text = String(req.body.text || '').replace(/\r/g, '').trim().slice(0, 2000);
+    if (!text) fail(400, 'Write the note first.');
+    db.prepare('INSERT INTO team_notes (team_id, ts, by, text) VALUES (?, ?, ?, ?)').run(t.id, now(), req.admin.name || req.admin.email, text);
+    U.audit(db, req.actor, 'added a note', { team: t.id });
+    return { ok: true };
+  }));
+  app.delete('/api/admin/teams/:id/notes/:note', wrap((req) => {
+    needAdmin(req);
+    const t = getTeam(req.params.id);
+    db.prepare('DELETE FROM team_notes WHERE id = ? AND team_id = ?').run(Number(req.params.note), t.id);
+    U.audit(db, req.actor, 'removed a note', { team: t.id });
+    return { ok: true };
+  }));
+  app.post('/api/admin/teams/:id/members', wrap((req) => {
+    needAdmin(req);
+    const t = getTeam(req.params.id);
+    const ids = [...new Set((Array.isArray(req.body.ids) ? req.body.ids : [req.body.person_id]).map(Number).filter(Number.isInteger))];
+    if (!ids.length) fail(400, 'Pick someone.');
+    for (const pid of ids) core.updatePerson(db, pid, { team_id: t.id }, req.actor, { allowDupes: true });
+    return { ok: true, count: ids.length };
+  }));
+  app.delete('/api/admin/teams/:id/members/:pid', wrap((req) => {
+    needAdmin(req);
+    const t = getTeam(req.params.id);
+    const p = core.mustPerson(db, Number(req.params.pid));
+    if (p.team_id !== t.id) fail(400, `${p.name} isn't on ${t.name}.`);
+    core.updatePerson(db, p.id, { team_id: null }, req.actor, { allowDupes: true });
+    return { ok: true };
+  }));
+  // everyone off every team; the teams themselves stay
+  app.post('/api/admin/teams/clear-members', wrap((req) => {
+    needAdmin(req);
+    if (req.body.confirm !== 'CLEAR TEAMS') fail(400, 'Type CLEAR TEAMS to confirm.');
+    const teams = db.prepare('SELECT id, name FROM teams').all();
+    let n = 0;
+    for (const t of teams) {
+      const c = db.prepare('UPDATE people SET team_id = NULL WHERE team_id = ?').run(t.id).changes;
+      if (c) U.audit(db, req.actor, 'everyone taken off this team', { team: t.id }, `${c} people`);
+      n += c;
+    }
+    U.audit(db, req.actor, 'cleared everyone\'s teams', {}, `${n} people`);
+    return { ok: true, count: n };
   }));
   // Split people into teams at random. scope: all | unassigned | checked_in | tag:<tag>
   app.post('/api/admin/teams/auto', wrap((req) => {
@@ -437,6 +560,10 @@ module.exports = function admin(ctx) {
     for (let i = pool.length - 1; i > 0; i--) { const j = require('node:crypto').randomInt(0, i + 1); [pool[i], pool[j]] = [pool[j], pool[i]]; }
     const st = db.prepare('UPDATE people SET team_id = ? WHERE id = ?');
     pool.forEach((p, i) => st.run(teams[i % teams.length], p.id));
+    for (const tid of teams) {
+      const names = pool.filter((p, i) => teams[i % teams.length] === tid).map((p) => p.name);
+      U.audit(db, req.actor, `${names.length} people joined by random split`, { team: tid }, names.join(', '));
+    }
     U.audit(db, req.actor, 'auto-split teams', {}, `${pool.length} people into ${teams.length} teams (${scope})`);
     return { people: pool.length, teams: teams.length };
   }));
@@ -483,7 +610,7 @@ module.exports = function admin(ctx) {
     if (!to.length) fail(400, 'Nobody matches that. Nothing sent.');
     const id = Number(db.prepare('INSERT INTO notices (ts, title, body, target_kind, target, urgent, emailed, by) VALUES (?, ?, ?, ?, ?, ?, 0, ?)')
       .run(now(), title, body, b.target_kind, target, b.urgent ? 1 : 0, req.actor).lastInsertRowid);
-    U.audit(db, req.actor, 'sent notification', {}, `${title} → ${to.length} people`);
+    U.audit(db, req.actor, 'sent notification', b.target_kind === 'team' ? { team: Number(target) } : {}, `${title} → ${to.length} people`);
     let emailing = 0;
     if (b.email) {
       const s = U.getSettings(db);
