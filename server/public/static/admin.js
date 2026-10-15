@@ -398,8 +398,8 @@
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && drawerFor) closeDrawer(); });
   function showDrawer(title, pills, body) {
     $('#dTitle').textContent = title;
-    $('#dPills').replaceChildren(...pills);
-    $('#dBody').replaceChildren(...body);
+    $('#dPills').replaceChildren(...pills.filter(Boolean));
+    $('#dBody').replaceChildren(...body.filter(Boolean)); // optional sections come through as null
     $('#drawer').hidden = false;
     $('#scrim').hidden = false;
   }

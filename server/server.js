@@ -363,11 +363,30 @@ require('./admin')(ctx);
 
 // ---------- pages ----------
 const pub = path.join(__dirname, 'public');
-app.use('/static', express.static(path.join(pub, 'static'), { maxAge: 0 }));
-app.get('/', (req, res) => res.sendFile(path.join(pub, 'home.html')));
-app.get(['/me', '/me/'], (req, res) => res.sendFile(path.join(pub, 'me.html')));
-app.get(['/admin', '/admin/'], (req, res) => res.sendFile(path.join(pub, 'admin.html')));
-app.get(['/wall', '/wall/'], (req, res) => res.sendFile(path.join(pub, 'wall.html')));
+// Cloudflare and browsers cache scripts and styles hard, so every page links them as /static/x.js?v=<build>,
+// where build is a hash of the static files. A deploy that changes any of them changes every link.
+const BUILD = (() => {
+  const h = require('node:crypto').createHash('sha256');
+  const dir = path.join(pub, 'static');
+  for (const f of fs.readdirSync(dir).sort()) h.update(f).update(fs.readFileSync(path.join(dir, f)));
+  return h.digest('hex').slice(0, 10);
+})();
+const pages = new Map();
+function page(name) {
+  if (!pages.has(name)) pages.set(name, fs.readFileSync(path.join(pub, name), 'utf8').replace(/(["'])\/static\/([^"'?]+)\1/g, `$1/static/$2?v=${BUILD}$1`));
+  return pages.get(name);
+}
+const sendPage = (name) => (req, res) => res.set('cache-control', 'no-store').type('html').send(page(name));
+app.use('/static', (req, res, next) => {
+  res.set('cache-control', req.query.v === BUILD ? 'public, max-age=31536000, immutable' : 'no-cache');
+  next();
+});
+app.use('/static', express.static(path.join(pub, 'static'), { cacheControl: false, etag: true }));
+app.get('/', sendPage('home.html'));
+app.get(['/me', '/me/'], sendPage('me.html'));
+app.get(['/admin', '/admin/'], sendPage('admin.html'));
+app.get(['/wall', '/wall/'], sendPage('wall.html'));
+app.get('/api/version', (req, res) => res.set('cache-control', 'no-store').json({ build: BUILD }));
 app.get('/favicon.ico', (req, res) => res.sendFile(path.join(pub, 'static', 'icon.png')));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
 app.use((req, res) => res.status(404).type('text').send('Not found'));
