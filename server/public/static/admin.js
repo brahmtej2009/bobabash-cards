@@ -690,7 +690,27 @@
     const label = pr.state === 'merged' ? 'merged' : pr.state === 'open' ? (pr.approved ? 'approved' : 'PR open') : 'closed';
     return el('a', { class: `pill ${pr.state === 'merged' ? 'merged' : pr.state === 'open' ? (pr.approved ? 'blue' : 'open') : ''}`, href: pr.url, target: '_blank', rel: 'noopener', text: label, onclick: (e) => e.stopPropagation() });
   }
+  function renderLinkBar() {
+    const locked = S.global_locked;
+    const single = CARDS.filter((c) => c.lock_mode === 'locked').length;
+    $('#linkBar').classList.toggle('locked', locked);
+    $('#linkState').textContent = locked ? 'Card links are locked' : 'Card links are open';
+    $('#linkSub').textContent = locked
+      ? `People cannot change where their card goes${S.settings.unlock_at ? `. Opens by itself ${fmt(S.settings.unlock_at)}` : ''}.`
+      : `Everyone can point their card at their project or any link from their dashboard.${single ? ` ${single} card${single === 1 ? ' is' : 's are'} locked one by one; unlocking all clears those too.` : ''}`;
+    $('#linkToggle').textContent = locked || single ? 'Unlock all cards' : 'Lock all cards';
+    $('#linkToggle').classList.toggle('danger', !locked && !single);
+  }
+  $('#linkToggle').addEventListener('click', run(async () => {
+    const open = S.global_locked || CARDS.some((c) => c.lock_mode === 'locked');
+    if (!open && !confirm('Lock every card? People will not be able to change where their card goes until you unlock.')) return;
+    const r = await api('/api/admin/cards/links', 'POST', { open });
+    toast(open ? `All cards unlocked${r.freed ? ` (${r.freed} single locks cleared)` : ''}` : 'All cards locked');
+    await refresh();
+    renderCards();
+  }));
   function renderCards() {
+    renderLinkBar();
     const rows = visibleCards();
     $('#cCount').textContent = `${rows.length} card${rows.length === 1 ? '' : 's'}`;
     $('#cEmpty').hidden = CARDS.length > 0;

@@ -411,6 +411,19 @@ module.exports = function admin(ctx) {
     skip_override: (v) => ({ skip_override: v ? 1 : 0 }),
     admin_url: (v) => ({ admin_url: U.cleanUrl(v) || null }),
   };
+  // one switch for everyone: open = holders can point their card anywhere, locked = frozen
+  app.post('/api/admin/cards/links', wrap((req) => {
+    needAdmin(req);
+    const open = !!req.body?.open;
+    U.setSettings(db, { lock_on: open ? '0' : '1', unlock_at: '' });
+    // cards an organiser froze one by one would stay frozen, so "unlock all" means all
+    const freed = open ? db.prepare("UPDATE cards SET lock_mode = 'global' WHERE lock_mode = 'locked'").run().changes : 0;
+    U.audit(db, req.actor, open ? 'unlocked every card link' : 'locked every card link', {}, freed ? `${freed} single-card locks cleared` : null);
+    sync();
+    const s = U.getSettings(db);
+    return { settings: s, global_locked: U.globalLocked(s), freed, still_locked: db.prepare("SELECT COUNT(*) n FROM cards WHERE lock_mode = 'locked'").get().n };
+  }));
+
   app.post('/api/admin/cards/bulk', wrap((req) => {
     needAdmin(req);
     const fn = CARD_BULK[req.body.action];

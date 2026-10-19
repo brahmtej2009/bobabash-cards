@@ -91,7 +91,7 @@ function cardId(v) {
 const DEFAULT_SETTINGS = {
   override_on: '0',
   override_url: '',
-  lock_on: '1',
+  lock_on: '0',
   unlock_at: '',
   // host 1: the link on the chip, a GitHub Pages repo of redirect pages
   card_base: 'https://bobabash.github.io',
