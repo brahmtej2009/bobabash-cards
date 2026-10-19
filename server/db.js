@@ -8,6 +8,8 @@ const { DatabaseSync } = require('node:sqlite');
 const MIGRATIONS = {
   log: { person_id: 'INTEGER', team_id: 'INTEGER' },
   files: { person_id: 'INTEGER' },
+  items: { emoji: 'TEXT' },
+  handouts: { qty: 'INTEGER NOT NULL DEFAULT 1' },
 };
 
 function open(dataDir) {
@@ -30,7 +32,15 @@ function open(dataDir) {
   }
   db.exec(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
   db.exec('PRAGMA foreign_keys = ON;');
+  seedBoba(db);
   return db;
 }
 
-module.exports = { open };
+// Boba is the one thing every event hands out, so its tile is there from the start (once; deleting it sticks).
+function seedBoba(db) {
+  if (db.prepare("SELECT 1 FROM settings WHERE key = 'boba_seeded'").get()) return;
+  db.prepare("INSERT OR IGNORE INTO items (name, stock, emoji, created_at) VALUES ('Boba', NULL, '🧋', ?)").run(Date.now());
+  db.prepare("INSERT INTO settings (key, value) VALUES ('boba_seeded', '1') ON CONFLICT(key) DO UPDATE SET value = '1'").run();
+}
+
+module.exports = { open, seedBoba };

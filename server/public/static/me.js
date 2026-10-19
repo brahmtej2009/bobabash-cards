@@ -392,7 +392,7 @@
         el('div', { style: { marginTop: '10px' } }, el('button', { class: 'btn sm ghost', type: 'button', text: 'See team', onclick: () => tab('team') })));
     } else fill(ht, el('h3', { text: 'Your team' }), el('p', { class: 'empty-note', text: 'Not on a team yet. Organisers will put you on one.' }));
     $('#hPoints').textContent = c.points;
-    fill($('#hItems'), c.items.length ? c.items.map((i) => el('span', { class: `pill${i.got ? ' got' : ''}`, text: `${i.got ? '✓ ' : ''}${i.name}` })) : el('span', { class: 'empty-note', text: 'Nothing to collect.' }));
+    fill($('#hItems'), c.items.length ? c.items.map((i) => el('span', { class: `pill${i.got ? ' got' : ''}`, text: `${i.got ? '✓ ' : ''}${i.emoji ? `${i.emoji} ` : ''}${i.name}${i.qty > 1 ? ` ×${i.qty}` : ''}` })) : el('span', { class: 'empty-note', text: 'Nothing to collect.' }));
 
     // ---- my card ----
     $('#noCard').hidden = c.cards.length > 0;

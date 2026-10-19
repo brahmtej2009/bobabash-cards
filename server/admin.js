@@ -114,7 +114,7 @@ module.exports = function admin(ctx) {
       person: { ...rest, tags: U.tagsOf(p), claimed: !!password_hash, profile: U.parseJson(p.profile, null), locked_out: p.pw_locked_until > now() },
       team,
       cards: cards.map((c) => cardView(c, p, s, prs)),
-      items: db.prepare('SELECT i.id, i.name, h.ts, h.by FROM items i LEFT JOIN handouts h ON h.item_id = i.id AND h.person_id = ? ORDER BY i.id').all(p.id),
+      items: db.prepare('SELECT i.id, i.name, i.emoji, h.ts, h.by, COALESCE(h.qty, 0) qty FROM items i LEFT JOIN handouts h ON h.item_id = i.id AND h.person_id = ? ORDER BY i.id').all(p.id),
       help: db.prepare('SELECT * FROM help WHERE person_id = ? ORDER BY ts DESC LIMIT 20').all(p.id),
       notices: notices.map((n) => ({ id: n.id, ts: n.ts, title: n.title, read_at: n.read_at, target_kind: n.target_kind })),
       points: db.prepare('SELECT * FROM points_log WHERE person_id = ? ORDER BY ts DESC LIMIT 20').all(p.id),
@@ -133,7 +133,7 @@ module.exports = function admin(ctx) {
       global_locked: U.globalLocked(s), override_active: U.overrideActive(s),
       next_card: core.nextFreeCard(db),
       teams: db.prepare('SELECT t.*, (SELECT COUNT(*) FROM people p WHERE p.team_id = t.id) members, (SELECT COALESCE(SUM(points),0) FROM people p WHERE p.team_id = t.id) member_points FROM teams t ORDER BY name').all(),
-      items: db.prepare('SELECT i.*, (SELECT COUNT(*) FROM handouts h WHERE h.item_id = i.id) given FROM items i ORDER BY id').all(),
+      items: db.prepare('SELECT i.*, COALESCE((SELECT SUM(qty) FROM handouts h WHERE h.item_id = i.id), 0) given, (SELECT COUNT(*) FROM handouts h WHERE h.item_id = i.id) people FROM items i ORDER BY id').all().map((i) => ({ ...i, left: i.stock == null ? null : i.stock - i.given })),
       admins: db.prepare('SELECT email, name, role, added_by, added_at FROM admins ORDER BY added_at').all(),
       counts: {
         people: db.prepare('SELECT COUNT(*) n FROM people').get().n,
@@ -714,22 +714,35 @@ module.exports = function admin(ctx) {
     return { ok: true };
   }));
 
-  // ---------- handout items ----------
+  // ---------- handouts: tiles with stock, given out at a counter by card number ----------
+  const itemRow = (id) => db.prepare(`SELECT i.*, COALESCE((SELECT SUM(qty) FROM handouts h WHERE h.item_id = i.id), 0) given,
+    (SELECT COUNT(*) FROM handouts h WHERE h.item_id = i.id) people FROM items i WHERE i.id = ?`).get(id);
+  const withLeft = (i) => i && { ...i, left: i.stock == null ? null : i.stock - i.given };
+  const cleanStock = (v) => (v === '' || v == null ? null : Math.max(0, Math.round(Number(v)) || 0));
+  const cleanEmoji = (v) => [...String(v || '').trim()].slice(0, 4).join('') || null;
+
   app.post('/api/admin/items', wrap((req) => {
     needAdmin(req);
     const name = U.cleanText(req.body.name, 60);
     if (!name) fail(400, 'Name the item.');
-    const stock = req.body.stock ? Math.max(0, Math.round(Number(req.body.stock))) : null;
-    db.prepare('INSERT INTO items (name, stock, created_at) VALUES (?, ?, ?)').run(name, stock, now());
+    if (db.prepare('SELECT 1 FROM items WHERE lower(name) = lower(?)').get(name)) fail(409, 'There is already an item with that name.');
+    const id = Number(db.prepare('INSERT INTO items (name, stock, emoji, created_at) VALUES (?, ?, ?, ?)').run(name, cleanStock(req.body.stock), cleanEmoji(req.body.emoji), now()).lastInsertRowid);
     U.audit(db, req.actor, 'added handout item', {}, name);
-    return { ok: true };
+    return withLeft(itemRow(id));
   }));
   app.patch('/api/admin/items/:id', wrap((req) => {
     needAdmin(req);
-    const name = U.cleanText(req.body.name, 60);
+    const it = itemRow(Number(req.params.id));
+    if (!it) fail(404, 'No such item.');
+    const b = req.body || {};
+    const name = 'name' in b ? U.cleanText(b.name, 60) : it.name;
     if (!name) fail(400, 'Name the item.');
-    db.prepare('UPDATE items SET name = ?, stock = ? WHERE id = ?').run(name, req.body.stock ? Math.max(0, Math.round(Number(req.body.stock))) : null, Number(req.params.id));
-    return { ok: true };
+    let stock = 'stock' in b ? cleanStock(b.stock) : it.stock;
+    if ('add_stock' in b) stock = (it.stock ?? it.given) + (Math.round(Number(b.add_stock)) || 0); // "+50 just arrived"
+    if (stock != null) stock = Math.max(0, stock);
+    db.prepare('UPDATE items SET name = ?, stock = ?, emoji = ? WHERE id = ?').run(name, stock, 'emoji' in b ? cleanEmoji(b.emoji) : it.emoji, it.id);
+    U.audit(db, req.actor, 'edited handout item', {}, `${name}${stock != null ? `, stock ${stock}` : ''}`);
+    return withLeft(itemRow(it.id));
   }));
   app.delete('/api/admin/items/:id', wrap((req) => {
     needAdmin(req);
@@ -738,6 +751,58 @@ module.exports = function admin(ctx) {
     db.prepare('DELETE FROM items WHERE id = ?').run(it.id);
     U.audit(db, req.actor, 'removed handout item', {}, it.name);
     return { ok: true };
+  }));
+
+  // the counter: type a card number, one more of this item goes to whoever holds it
+  app.post('/api/admin/items/:id/give', wrap((req) => {
+    needDesk(req);
+    U.mustLimit(db, `give:${req.actor}`, 1500, 3600e3);
+    const it = itemRow(Number(req.params.id));
+    if (!it) fail(404, 'No such item.');
+    const raw = String(req.body.card ?? '').trim().replace(/^#/, '');
+    if (!/^\d{1,5}$/.test(raw)) fail(400, 'Type the card number.');
+    const card = core.getCard(db, Number(raw));
+    if (!card) fail(404, `There is no card ${raw}.`);
+    if (!card.person_id) fail(400, `Card ${raw} is not given to anyone yet. Register it at the Desk first.`);
+    const p = core.getPerson(db, card.person_id);
+    if (p.disabled) fail(400, `The account on card ${raw} is switched off.`);
+    if (it.stock != null && it.given >= it.stock && !req.body.force) fail(409, `${it.name} is out of stock (${it.given} of ${it.stock} given). Add stock, or give anyway.`);
+    db.prepare('INSERT INTO handouts (person_id, item_id, ts, by, qty) VALUES (?, ?, ?, ?, 1) ON CONFLICT(person_id, item_id) DO UPDATE SET qty = qty + 1, ts = excluded.ts, by = excluded.by')
+      .run(p.id, it.id, now(), req.actor);
+    const qty = db.prepare('SELECT qty FROM handouts WHERE person_id = ? AND item_id = ?').get(p.id, it.id).qty;
+    const logId = Number(db.prepare('INSERT INTO handout_log (ts, item_id, person_id, card_id, qty_after, by) VALUES (?, ?, ?, ?, ?, ?)').run(now(), it.id, p.id, card.id, qty, req.actor).lastInsertRowid);
+    U.audit(db, req.actor, `handed out ${it.name}${qty > 1 ? ` (now ${qty})` : ''}`, { person: p.id, card: card.id });
+    ctx.bus.emit('person', p.id, 'handout');
+    const team = p.team_id ? db.prepare('SELECT name FROM teams WHERE id = ?').get(p.team_id)?.name : null;
+    return { log_id: logId, qty, person: { id: p.id, name: p.name, team }, card: card.id, item: withLeft(itemRow(it.id)) };
+  }));
+
+  // undo one give from the feed (a typo at the counter)
+  app.post('/api/admin/handouts/undo/:log', wrap((req) => {
+    needDesk(req);
+    const l = db.prepare('SELECT * FROM handout_log WHERE id = ?').get(Number(req.params.log));
+    if (!l || l.undone) fail(404, 'Already undone.');
+    const h = db.prepare('SELECT qty FROM handouts WHERE person_id = ? AND item_id = ?').get(l.person_id, l.item_id);
+    if (h && h.qty > 1) db.prepare('UPDATE handouts SET qty = qty - 1 WHERE person_id = ? AND item_id = ?').run(l.person_id, l.item_id);
+    else db.prepare('DELETE FROM handouts WHERE person_id = ? AND item_id = ?').run(l.person_id, l.item_id);
+    db.prepare('UPDATE handout_log SET undone = 1 WHERE id = ?').run(l.id);
+    const it = itemRow(l.item_id);
+    U.audit(db, req.actor, `took back one ${it?.name || 'item'}`, { person: l.person_id });
+    ctx.bus.emit('person', l.person_id, 'handout');
+    return { ok: true, item: withLeft(it) };
+  }));
+
+  // the counter screen: the item, the latest gives, and who has had the most
+  app.get('/api/admin/items/:id', wrap((req) => {
+    needDesk(req);
+    const it = itemRow(Number(req.params.id));
+    if (!it) fail(404, 'No such item.');
+    return {
+      item: withLeft(it),
+      feed: db.prepare('SELECT l.id, l.ts, l.card_id, l.qty_after, l.by, l.undone, p.id person_id, p.name FROM handout_log l JOIN people p ON p.id = l.person_id WHERE l.item_id = ? ORDER BY l.id DESC LIMIT 40').all(it.id),
+      most: db.prepare('SELECT h.qty, p.id person_id, p.name FROM handouts h JOIN people p ON p.id = h.person_id WHERE h.item_id = ? AND h.qty > 1 ORDER BY h.qty DESC, h.ts DESC LIMIT 8').all(it.id),
+      here_without: db.prepare('SELECT COUNT(*) n FROM people p WHERE p.disabled = 0 AND p.checked_in_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM handouts h WHERE h.person_id = p.id AND h.item_id = ?)').get(it.id).n,
+    };
   }));
 
   app.get('/api/admin/points', wrap((req) => {
@@ -794,7 +859,7 @@ module.exports = function admin(ctx) {
         const p = card?.person_id ? core.getPerson(db, card.person_id) : null;
         return { card: Number(id), n: c, person_id: p?.id || null, name: p?.name || '' };
       }),
-      items: db.prepare('SELECT i.name, i.stock, (SELECT COUNT(*) FROM handouts h WHERE h.item_id = i.id) given FROM items i ORDER BY i.id').all(),
+      items: db.prepare('SELECT i.name, i.stock, COALESCE((SELECT SUM(qty) FROM handouts h WHERE h.item_id = i.id), 0) given FROM items i ORDER BY i.id').all(),
     };
   }));
 
@@ -1036,7 +1101,7 @@ module.exports = function admin(ctx) {
     needAdmin(req);
     U.audit(db, req.actor, 'exported backup');
     const dump = {};
-    for (const t of ['people', 'cards', 'teams', 'notices', 'notice_reads', 'schedule', 'help', 'items', 'handouts', 'points_log', 'settings', 'admins', 'prs', 'log', 'scans', 'files']) {
+    for (const t of ['people', 'cards', 'teams', 'notices', 'notice_reads', 'schedule', 'help', 'items', 'handouts', 'handout_log', 'points_log', 'settings', 'admins', 'prs', 'log', 'scans', 'files']) {
       dump[t] = db.prepare(`SELECT * FROM ${t}`).all().map(({ pin_hash, password_hash, ...r }) => r);
     }
     res.set('content-disposition', `attachment; filename="bobabash-${dayKey(now())}.json"`);

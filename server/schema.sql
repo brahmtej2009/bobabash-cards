@@ -98,16 +98,30 @@ CREATE TABLE IF NOT EXISTS help (
 CREATE TABLE IF NOT EXISTS items (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   name       TEXT NOT NULL UNIQUE,                  -- e.g. T-shirt, Dinner, Stickers
-  stock      INTEGER,                               -- optional
+  stock      INTEGER,                               -- how many we have in total; NULL = not counted
+  emoji      TEXT,                                  -- shown on the tile
   created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS handouts (
   person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
   item_id   INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
-  ts        INTEGER NOT NULL,
+  ts        INTEGER NOT NULL,                       -- last time they got one
   by        TEXT,
+  qty       INTEGER NOT NULL DEFAULT 1,             -- boba can go out more than once
   PRIMARY KEY (person_id, item_id)
 );
+-- every single give, so the counter can show a feed and undo a mistake
+CREATE TABLE IF NOT EXISTS handout_log (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts        INTEGER NOT NULL,
+  item_id   INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  card_id   INTEGER,
+  qty_after INTEGER NOT NULL,
+  by        TEXT,
+  undone    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS handout_log_item ON handout_log (item_id, id);
 
 CREATE TABLE IF NOT EXISTS points_log (
   id        INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -257,13 +257,63 @@
 
       <!-- ===== handouts ===== -->
       <section data-page="handouts" hidden>
-        <div class="head"><h2>Handouts</h2><span class="muted small">T-shirts, food, stickers. Tick them off per person.</span></div>
-        <form class="inline wrap block" id="iForm" data-admin><input name="name" placeholder="T-shirt" required><input name="stock" type="number" min="0" placeholder="Stock (optional)" class="w-tag"><button class="btn primary" type="submit">Add item</button></form>
-        <div class="list" id="iList"></div>
-        <div class="block" id="iQueue">
-          <div class="head"><h3>Who hasn't got it yet</h3><select id="iPick" class="w-tag"></select><label class="check"><input type="checkbox" id="iHereOnly" checked> Only people here</label></div>
-          <input id="iSearch" placeholder="Filter by name or card" autocomplete="off">
-          <div class="list flat" id="iMissing"></div>
+        <!-- the shelf: one tile per item -->
+        <div id="iShelf">
+          <div class="head"><h2>Handouts</h2><span class="muted small">Click a tile, type card numbers, press Enter. One ding = their first. Dung dung = they already had one.</span></div>
+          <div class="tiles" id="iTiles"></div>
+          <form class="block tile-add" id="iForm" data-admin>
+            <h3>New item</h3>
+            <div class="inline wrap">
+              <input name="emoji" placeholder="🍕" maxlength="4" class="w-emoji" aria-label="Emoji">
+              <input name="name" placeholder="Pizza" required maxlength="60">
+              <input name="stock" type="number" min="0" placeholder="Stock (empty = not counted)" class="w-stock">
+              <button class="btn primary" type="submit">Add item</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- the counter: one item, card numbers in -->
+        <div id="iCounter" hidden>
+          <div class="head counter-head">
+            <button class="btn ghost" type="button" id="iBack">← All items</button>
+            <h2 id="icTitle"></h2>
+            <span class="muted small" id="icStock"></span>
+            <span class="grow"></span>
+            <span class="inline" data-admin>
+              <button class="btn sm" type="button" id="icAdd">+ Stock</button>
+              <button class="btn sm ghost" type="button" id="icEdit">Edit</button>
+              <button class="btn sm danger" type="button" id="icDelete">Delete</button>
+            </span>
+          </div>
+          <div class="stockbar big"><i id="icBar"></i></div>
+          <div class="counter">
+            <div>
+              <form class="block give" id="icForm" autocomplete="off">
+                <label for="icCard"><b>Card number</b></label>
+                <div class="inline">
+                  <input id="icCard" name="card" inputmode="numeric" pattern="#?[0-9]*" maxlength="6" placeholder="17" required>
+                  <button class="btn accent big" type="submit">Give 1</button>
+                </div>
+                <label class="check small"><input type="checkbox" id="icSound" checked> Sounds</label>
+              </form>
+              <div class="result" id="icResult" hidden></div>
+              <div class="block">
+                <div class="head"><h3>Just now</h3><span class="muted small">Typo? Undo it here.</span></div>
+                <div class="list flat" id="icFeed"></div>
+              </div>
+            </div>
+            <div>
+              <div class="block">
+                <h3>Had more than one</h3>
+                <div class="list flat" id="icMost"></div>
+              </div>
+              <div class="block">
+                <div class="head"><h3>Here but not given yet</h3><span class="pill" id="icWithoutN"></span></div>
+                <input id="icSearch" placeholder="Filter by name or card" autocomplete="off">
+                <div class="list flat" id="icWithout"></div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

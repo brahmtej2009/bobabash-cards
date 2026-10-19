@@ -7,7 +7,7 @@ const U = require('./util');
 const PHRASE = 'RESET BOBA BASH';
 
 // Order matters: children before parents.
-const TABLES = ['notice_reads', 'notices', 'team_notes', 'handouts', 'items', 'points_log', 'help', 'schedule', 'scans', 'prs', 'cards', 'people', 'teams', 'files', 'otps', 'limits', 'log'];
+const TABLES = ['notice_reads', 'notices', 'team_notes', 'handout_log', 'handouts', 'items', 'points_log', 'help', 'schedule', 'scans', 'prs', 'cards', 'people', 'teams', 'files', 'otps', 'limits', 'log'];
 
 function counts(db) {
   const n = (sql) => db.prepare(sql).get().n;
@@ -36,7 +36,7 @@ function backup(db, dataDir) {
 }
 
 // Settings that describe the setup (hosts, repos, texts) can stay; the live switches always go back to safe defaults.
-const RUNTIME = { override_on: '0', override_url: '', override_from: '', override_until: '', lock_on: '1', unlock_at: '', tag_overrides: '{}', announcement: '', wall_note: '', last_pr_sync: '0', last_publish: '0', last_publish_error: '' };
+const RUNTIME = { override_on: '0', override_url: '', override_from: '', override_until: '', lock_on: '0', unlock_at: '', tag_overrides: '{}', announcement: '', wall_note: '', last_pr_sync: '0', last_publish: '0', last_publish_error: '' };
 
 function wipe(db, dataDir, { keepSettings = true, actor }) {
   const before = counts(db);
@@ -53,6 +53,8 @@ function wipe(db, dataDir, { keepSettings = true, actor }) {
     db.exec('ROLLBACK');
     throw e;
   }
+  db.exec("DELETE FROM settings WHERE key = 'boba_seeded'");
+  require('./db').seedBoba(db);
   const uploads = path.join(dataDir, 'uploads');
   for (const f of fs.existsSync(uploads) ? fs.readdirSync(uploads) : []) fs.rmSync(path.join(uploads, f), { force: true });
   U.audit(db, actor, 'reset everything to fresh', {}, { removed: before, backup: path.basename(file), kept_settings: keepSettings });
