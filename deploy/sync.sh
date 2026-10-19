@@ -4,7 +4,7 @@
 #   bash deploy/sync.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
-PVE="${PVE:-root@192.168.1.64}"
+PVE="${PVE:-$(cat "$(dirname "$0")/.host" 2>/dev/null)}"; [ -n "$PVE" ] || { echo "Put root@<proxmox-host> in deploy/.host (gitignored) or set PVE"; exit 1; }
 CTID="${CTID:-140}"
 TMP="$(mktemp -d)"
 

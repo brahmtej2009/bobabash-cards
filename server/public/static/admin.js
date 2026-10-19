@@ -1126,9 +1126,57 @@
   const SETUP_KEYS = ['card_base', 'redirect_repo', 'repo', 'project_template', 'dashboard_url'];
   function renderSetup() {
     for (const k of SETUP_KEYS) $(`[data-page=setup] [name=${k}]`).value = S.settings[k] || '';
+    renderMail();
     $('#ghState').textContent = !S.github.token ? 'No GITHUB_TOKEN on the server. Add it to /etc/cards.env and restart.'
       : S.github.problem ? `Last sync ${ago(S.github.last_sync)}. ${S.github.problem}` : S.github.last_sync ? `Last synced ${ago(S.github.last_sync)}. All good.` : 'Not synced yet.';
   }
+  // ---------- outgoing mail ----------
+  const mf = $('#mailForm');
+  function renderMail() {
+    const m = S.mail || {};
+    $('#mailState').textContent = !m.ready ? 'Not set up. Codes and emails cannot go out until this is filled in.'
+      : m.source === 'env' ? `Using the server config file: ${m.user} via ${m.host}:${m.port}. Save here to switch to dashboard settings.`
+        : `Sending as ${m.from_name} <${m.user}> via ${m.host}:${m.port}. App password saved.`;
+    if (document.activeElement?.closest('#mailForm')) return;
+    mf.host.value = m.source === 'dashboard' ? m.host : 'smtp.zoho.in';
+    mf.port.value = String(m.source === 'dashboard' ? m.port : 465);
+    mf.user.value = m.source === 'dashboard' ? m.user : 'outreach@boba-bash.xyz';
+    mf.from_name.value = m.source === 'dashboard' ? m.from_name : 'Boba Bash Greater Noida';
+    mf.provider.value = [...mf.provider.options].some((o) => o.value === mf.host.value) ? mf.host.value : '';
+    mf.pass.value = '';
+    mf.pass.placeholder = m.source === 'dashboard' && m.has_pass ? 'Saved. Leave empty to keep it' : 'Paste the app password';
+    $('#mailClear').hidden = m.source !== 'dashboard';
+  }
+  mf.provider.addEventListener('change', () => { if (mf.provider.value) mf.host.value = mf.provider.value; });
+  mf.host.addEventListener('input', () => { mf.provider.value = [...mf.provider.options].some((o) => o.value === mf.host.value.trim()) ? mf.host.value.trim() : ''; });
+  mf.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = $('.err', mf);
+    err.textContent = '';
+    const btn = $('button[type=submit]', mf);
+    btn.disabled = true;
+    try {
+      const r = await api('/api/admin/mail', 'POST', { host: mf.host.value, port: mf.port.value, user: mf.user.value, from_name: mf.from_name.value, pass: mf.pass.value });
+      S.mail = r.mail;
+      mf.pass.value = '';
+      renderMail();
+      if (r.ok) toast('Saved. The mail server accepted the login.');
+      else err.textContent = r.error;
+    } catch (x) { err.textContent = x.message; }
+    btn.disabled = false;
+  });
+  $('#mailTest').addEventListener('click', run(async (e) => {
+    e.currentTarget.disabled = true;
+    try { const r = await api('/api/admin/mail/test', 'POST', {}); toast(`Test mail sent to ${r.to}. Check the inbox (and spam).`); }
+    finally { $('#mailTest').disabled = false; }
+  }));
+  $('#mailClear').addEventListener('click', run(async () => {
+    if (!confirm('Remove the saved SMTP settings? Mail will stop unless the server config file has some.')) return;
+    S.mail = (await api('/api/admin/mail', 'POST', { clear: true })).mail;
+    renderMail();
+    toast('Removed.');
+  }));
+
   $('#saveSetup').addEventListener('click', run(() => saveSettings(Object.fromEntries(SETUP_KEYS.map((k) => [k, $(`[data-page=setup] [name=${k}]`).value])))));
   $('#syncNow').addEventListener('click', run(async (e) => {
     const b = e.currentTarget;

@@ -223,3 +223,9 @@ CREATE TABLE IF NOT EXISTS files (
   person_id  INTEGER,                                -- set for an owner's avatar
   created_at INTEGER NOT NULL
 );
+
+-- server-only secrets (SMTP password). Never sent to a browser, never in exports or backups downloads.
+CREATE TABLE IF NOT EXISTS secrets (
+  k TEXT PRIMARY KEY,
+  v TEXT NOT NULL
+);

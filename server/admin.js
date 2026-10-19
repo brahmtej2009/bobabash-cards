@@ -146,6 +146,7 @@ module.exports = function admin(ctx) {
       },
       github: { token: gh.hasToken(), last_sync: Number(s.last_publish || 0), problem: s.last_publish_error },
       smtp: mail.ready(),
+      mail: mail.status(),
     };
   }));
 
@@ -782,6 +783,44 @@ module.exports = function admin(ctx) {
       }),
       items: db.prepare('SELECT i.name, i.stock, (SELECT COUNT(*) FROM handouts h WHERE h.item_id = i.id) given FROM items i ORDER BY i.id').all(),
     };
+  }));
+
+  // ---------- outgoing mail (SMTP) ----------
+  // The password goes in, never comes back out: the page only learns whether one is saved.
+  app.post('/api/admin/mail', wrap(async (req) => {
+    needAdmin(req);
+    const b = req.body || {};
+    if (b.clear) {
+      mail.clear();
+      U.audit(db, req.actor, 'removed dashboard SMTP settings');
+      return { mail: mail.status() };
+    }
+    const host = String(b.host || '').trim().toLowerCase();
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host)) fail(400, 'Give the SMTP server, like smtp.zoho.in.');
+    const port = Number(b.port) || 465;
+    if (![465, 587, 25, 2525].includes(port)) fail(400, 'Port is usually 465 (SSL) or 587.');
+    const user = U.cleanEmail(b.user);
+    if (!user) fail(400, 'The login is the full email address, like outreach@boba-bash.xyz.');
+    const pass = String(b.pass || '');
+    if (pass.length > 200) fail(400, 'That password is too long.');
+    if (!pass && !mail.status().has_pass) fail(400, 'Paste the app password.');
+    if (!pass && mail.status().source !== 'dashboard') fail(400, 'Paste the app password.');
+    mail.save({ host, port, user, pass, from_name: U.cleanText(b.from_name, 80) || 'Boba Bash Cards' });
+    U.audit(db, req.actor, 'changed SMTP settings', {}, `${user} via ${host}:${port}`);
+    try { await mail.verify(); } catch (e) { return { mail: mail.status(), ok: false, error: `Saved, but the server said: ${e.message}` }; }
+    return { mail: mail.status(), ok: true };
+  }));
+
+  app.post('/api/admin/mail/test', wrap(async (req) => {
+    needAdmin(req);
+    U.mustLimit(db, `mail-test:${req.actor}`, 10, 3600e3);
+    const to = U.cleanEmail(req.body?.to) || req.admin.email;
+    if (!mail.ready()) fail(400, 'No SMTP settings yet.');
+    try {
+      await mail.send(to, 'Boba Bash Cards: test mail', 'If you can read this, mail from the dashboard works.\n\nBoba Bash Greater Noida', '<p style="font:15px/1.5 sans-serif;color:#3d2b18">If you can read this, mail from the dashboard works.</p><p style="font:15px/1.5 sans-serif;color:#6b5842">Boba Bash Greater Noida</p>');
+    } catch (e) { fail(502, `Sending failed: ${e.message}`); }
+    U.audit(db, req.actor, 'sent a test mail', {}, to);
+    return { ok: true, to };
   }));
 
   // ---------- settings ----------

@@ -1,23 +1,53 @@
-// Mail over Gmail SMTP. Without SMTP creds (local dev) mails are printed to the console instead.
+// Mail over SMTP (Zoho, Gmail, anything). Settings saved in Cards HQ → Setup win over /etc/cards.env.
+// Without SMTP creds (local dev) mails are printed to the console instead.
 const nodemailer = require('nodemailer');
 
-let transport = null;
-const ready = () => !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+let db = null, transport = null, key = '';
+const use = (d) => { db = d; transport = null; };
+function config() {
+  let saved = null;
+  try { saved = db && JSON.parse(db.prepare("SELECT v FROM secrets WHERE k = 'smtp'").get()?.v || 'null'); } catch {}
+  if (saved?.user && saved?.pass) return { ...saved, source: 'dashboard' };
+  const e = process.env;
+  return { host: e.SMTP_HOST || 'smtp.gmail.com', port: Number(e.SMTP_PORT || 465), user: e.SMTP_USER || '', pass: e.SMTP_PASS || '', from_name: e.MAIL_FROM_NAME || '', source: e.SMTP_USER && e.SMTP_PASS ? 'env' : 'none' };
+}
+const ready = () => config().source !== 'none';
 function getTransport() {
-  if (transport || !ready()) return transport;
+  const c = config();
+  if (c.source === 'none') return null;
+  const k = [c.host, c.port, c.user, c.pass].join('|');
+  if (transport && k === key) return transport;
+  if (transport) transport.close();
+  key = k;
+  const port = Number(c.port) || 465;
   transport = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: Number(process.env.SMTP_PORT || 465),
-    secure: true,
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    pool: true,
-    maxConnections: 2,
+    host: c.host, port, secure: port === 465,
+    auth: { user: c.user, pass: c.pass },
+    pool: true, maxConnections: 2,
+    connectionTimeout: 15000, greetingTimeout: 15000,
   });
   return transport;
 }
+// what the admin page may see: everything except the password
+function status() {
+  const c = config();
+  return { ready: c.source !== 'none', source: c.source, host: c.host, port: Number(c.port) || 465, user: c.user, from_name: c.from_name || 'Boba Bash Cards', has_pass: !!c.pass };
+}
+function save(next) {
+  const old = config();
+  const keepPass = !next.pass && old.source === 'dashboard' ? old.pass : next.pass;
+  db.prepare("INSERT INTO secrets (k, v) VALUES ('smtp', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v")
+    .run(JSON.stringify({ host: next.host, port: next.port, user: next.user, pass: keepPass, from_name: next.from_name }));
+}
+const clear = () => db.prepare("DELETE FROM secrets WHERE k = 'smtp'").run();
+async function verify() {
+  const t = getTransport();
+  if (!t) throw new Error('No SMTP settings yet.');
+  await t.verify();
+}
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const FROM = () => ({ name: process.env.MAIL_FROM_NAME || 'Boba Bash Cards', address: process.env.SMTP_USER });
+const FROM = () => { const c = config(); return { name: c.from_name || 'Boba Bash Cards', address: c.user }; };
 
 async function send(to, subject, text, html) {
   const t = getTransport();
@@ -48,4 +78,4 @@ ${link ? `<p style="margin:0 0 14px"><a href="${esc(link)}" style="color:#3d2b18
   return send(to, title, text, html);
 }
 
-module.exports = { sendCode, sendNotice, ready };
+module.exports = { use, sendCode, sendNotice, send, ready, status, save, clear, verify };

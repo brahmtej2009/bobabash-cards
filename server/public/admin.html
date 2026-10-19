@@ -483,6 +483,31 @@
           <p class="small" id="ghState"></p>
           <div class="actions"><button class="btn" id="syncNow">Sync now</button></div>
         </div>
+        <form class="block" id="mailForm" autocomplete="off">
+          <h3>Outgoing mail (SMTP)</h3>
+          <p class="muted">Login codes, password resets and email copies of notifications go out from this account. For Zoho: make an app password at <b>accounts.zoho.in → Security → App passwords</b> (or accounts.zoho.com) and paste it below. The password is kept on the server and never shown again.</p>
+          <p class="small" id="mailState"></p>
+          <div class="grid two">
+            <label class="field"><span>Provider</span><select name="provider">
+              <option value="smtp.zoho.in">Zoho (India, zoho.in)</option>
+              <option value="smtp.zoho.com">Zoho (global, zoho.com)</option>
+              <option value="smtp.zoho.eu">Zoho (EU, zoho.eu)</option>
+              <option value="smtp.gmail.com">Gmail</option>
+              <option value="">Other</option>
+            </select></label>
+            <label class="field"><span>SMTP server</span><input name="host" placeholder="smtp.zoho.in"></label>
+            <label class="field"><span>Port</span><select name="port"><option value="465">465 (SSL)</option><option value="587">587 (STARTTLS)</option></select></label>
+            <label class="field"><span>Login email (sends from this)</span><input name="user" type="email" placeholder="outreach@boba-bash.xyz" autocomplete="off"></label>
+            <label class="field"><span>Sender name</span><input name="from_name" placeholder="Boba Bash Greater Noida"></label>
+            <label class="field"><span>App password</span><input name="pass" type="password" autocomplete="new-password" placeholder="Paste the app password"></label>
+          </div>
+          <p class="err"></p>
+          <div class="actions">
+            <button class="btn primary" type="submit">Save and check</button>
+            <button class="btn" type="button" id="mailTest">Send me a test mail</button>
+            <button class="btn" type="button" id="mailClear">Remove saved settings</button>
+          </div>
+        </form>
         <div class="block">
           <h3>Backup</h3>
           <div class="actions"><a class="btn" href="/api/admin/export.json" download>Full backup (JSON)</a><a class="btn" href="/api/admin/export.csv" download>People (CSV)</a></div>
