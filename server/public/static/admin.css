@@ -340,3 +340,9 @@ nav .grp { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line
 nav .grp:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .swaprow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
 .swaprow input, .swaprow select { flex: none; }
+
+/* cards page: one switch for every card's link */
+.linkbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.linkbar.locked { background: var(--amber-soft); }
+.linkbar b { font-size: 15px; }
+.linkbar p { margin: 2px 0 0; }

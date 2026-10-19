@@ -270,6 +270,10 @@
       <!-- ===== cards ===== -->
       <section data-page="cards" hidden>
         <div class="head"><h2>Cards</h2><span class="muted small">Click a card to control it: holder, PIN, routing, on/off.</span></div>
+        <div class="block linkbar" id="linkBar" data-admin>
+          <div><b id="linkState"></b><p class="muted small" id="linkSub"></p></div>
+          <button class="btn primary" type="button" id="linkToggle"></button>
+        </div>
         <div class="grid two" data-admin>
           <form class="block" id="cardAdd">
             <h3>Add a printed card</h3>
