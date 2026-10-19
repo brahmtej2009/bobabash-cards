@@ -214,7 +214,7 @@ module.exports = function owner(ctx) {
     const notices = db.prepare('SELECT id, ts, title, body, urgent, target_kind, target FROM notices ORDER BY ts DESC LIMIT 300').all()
       .filter((n) => noticeVisible(n, p))
       .map((n) => ({ id: n.id, ts: n.ts, title: n.title, body: n.body, urgent: !!n.urgent, read: read.has(n.id) }));
-    const items = db.prepare('SELECT i.id, i.name, h.ts FROM items i LEFT JOIN handouts h ON h.item_id = i.id AND h.person_id = ? ORDER BY i.id').all(p.id);
+    const items = db.prepare('SELECT i.id, i.name, i.emoji, h.ts, h.qty FROM items i LEFT JOIN handouts h ON h.item_id = i.id AND h.person_id = ? ORDER BY i.id').all(p.id);
     const lockedAll = cards.length > 0 && cards.every((c) => c.locked);
     return {
       id: p.id, name: p.name, email: p.email, github: p.github, tags: U.tagsOf(p),
@@ -226,7 +226,7 @@ module.exports = function owner(ctx) {
       notices, unread: notices.filter((n) => !n.read).length,
       schedule: db.prepare('SELECT id, starts_at, ends_at, title, place, note FROM schedule ORDER BY starts_at').all(),
       help: db.prepare('SELECT id, ts, kind, message, status, reply, updated_at FROM help WHERE person_id = ? ORDER BY ts DESC LIMIT 20').all(p.id),
-      items: items.map((i) => ({ name: i.name, got: !!i.ts, ts: i.ts })),
+      items: items.map((i) => ({ name: i.name, emoji: i.emoji || '', got: !!i.ts, qty: i.qty || 0, ts: i.ts })),
       prs: cards.length ? db.prepare(`SELECT number, title, state, merged, approved, url, card_id FROM prs WHERE card_id IN (${cards.map(() => '?').join(',')}) ORDER BY number DESC`).all(...cards.map((c) => c.id)) : [],
       sites_repo: s.repo,
       public: publicInfo(),

@@ -180,7 +180,6 @@
     keep($('#pTeam'), [el('option', { value: '', text: 'Any team' }), el('option', { value: 'none', text: 'No team' }), ...S.teams.map((t) => el('option', { value: t.id, text: t.name }))]);
     keep($('#pTag'), [el('option', { value: '', text: 'Any tag' }), ...allTags().map((t) => el('option', { value: t, text: t }))]);
     keep($('#autoScope'), [el('option', { value: 'unassigned', text: 'Everyone without a team' }), el('option', { value: 'checked_in', text: 'Checked in, without a team' }), ...allTags().map((t) => el('option', { value: `tag:${t}`, text: `Tagged ${t}, without a team` }))]);
-    keep($('#iPick'), S.items.map((i) => el('option', { value: i.id, text: i.name })));
     $('#regItems').replaceChildren(...(S.items.length ? [el('span', { class: 'lbl', text: 'Hand out now' })] : []), ...S.items.map((i) => el('label', { class: 'check' }, el('input', { type: 'checkbox', name: 'item', value: i.id }), i.name)));
   }
 
@@ -529,7 +528,7 @@
 
     const items = el('div', { class: 'secline' }, d.items.length ? d.items.map((i) => el('label', { class: 'check' },
       el('input', { type: 'checkbox', checked: !!i.ts, onchange: run(async (e) => reopenPerson(p.id, await api(`/api/admin/people/${p.id}/items/${i.id}`, 'POST', { on: e.target.checked }))) }),
-      i.name, i.ts ? el('span', { class: 'muted small', text: ` ${hm(i.ts)}` }) : null)) : el('span', { class: 'muted', text: 'No handout items. Add them under Handouts.' }));
+      `${i.emoji ? i.emoji + ' ' : ''}${i.name}${i.qty > 1 ? ` ×${i.qty}` : ''}`, i.ts ? el('span', { class: 'muted small', text: ` ${hm(i.ts)}` }) : null)) : el('span', { class: 'muted', text: 'No handout items. Add them under Handouts.' }));
 
     const ptsIn = el('input', { type: 'number', placeholder: '+10', class: 'w-id' });
     const ptsWhy = el('input', { placeholder: 'reason' });
@@ -1055,32 +1054,185 @@
   });
 
   // ================= handouts =================
+  // Shelf of tiles -> click one -> counter: type a card number, Enter, one more goes out.
+  // Sounds tell the volunteer without looking: ding = their first, dung dung = they already had one, buzz = problem.
+  let actx = null;
+  const soundsOn = () => { try { return localStorage.getItem('hq-sounds') !== 'off'; } catch { return true; } };
+  function tone(freq, at, len, type = 'sine', vol = 0.25) {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + len);
+    o.connect(g).connect(actx.destination);
+    o.start(at);
+    o.stop(at + len + 0.05);
+  }
+  function sound(kind) {
+    if (!soundsOn()) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+      const t = actx.currentTime + 0.01;
+      if (kind === 'ding') { tone(1318, t, 0.9); tone(2637, t, 0.5, 'sine', 0.06); }
+      else if (kind === 'dung') { tone(262, t, 0.32, 'triangle', 0.35); tone(196, t + 0.26, 0.45, 'triangle', 0.35); }
+      else { tone(140, t, 0.18, 'sawtooth', 0.12); tone(140, t + 0.22, 0.18, 'sawtooth', 0.12); }
+    } catch {}
+  }
+
+  let counterItem = null, counterData = null, counterPoll = null;
+  const stockText = (i) => (i.stock == null ? `${i.given} given · not counted` : `${Math.max(0, i.left)} left of ${i.stock}`);
+  const stockPct = (i) => (i.stock ? Math.max(0, Math.min(100, (i.left / i.stock) * 100)) : 100);
+  const stockCls = (i) => (i.stock == null ? '' : i.left <= 0 ? 'out' : i.left <= Math.max(3, i.stock * 0.1) ? 'low' : '');
+
   function renderHandouts() {
-    $('#iList').replaceChildren(...(S.items.length ? S.items.map((i) => el('div', {},
-      el('span', { class: 'row-main' }, el('b', { text: i.name }), el('span', { class: 'muted', text: `${i.given} given${i.stock != null ? ` of ${i.stock}` : ''}` }),
-        i.stock != null && i.given >= i.stock ? el('span', { class: 'pill bad', text: 'out' }) : null),
-      isAdmin() ? el('span', { class: 'inline' },
-        el('button', { class: 'btn sm ghost', type: 'button', text: 'Rename', onclick: run(async () => { const n = prompt('New name', i.name); if (!n) return; const st = prompt('Stock (empty for none)', i.stock ?? ''); await api(`/api/admin/items/${i.id}`, 'PATCH', { name: n, stock: st }); await refresh(); renderHandouts(); }) }),
-        el('button', { class: 'btn sm danger', type: 'button', text: 'Delete', onclick: run(async () => { if (!confirm(`Delete ${i.name}? Who-got-it records go too.`)) return; await api(`/api/admin/items/${i.id}`, 'DELETE'); await refresh(); renderHandouts(); }) })) : null)) : [el('div', {}, el('span', { class: 'muted', text: 'No items yet.' }))]));
-    $('#iQueue').hidden = !S.items.length;
-    renderMissing();
+    if (counterItem && S.items.some((i) => i.id === counterItem)) return openCounter(counterItem, true);
+    counterItem = null;
+    $('#iShelf').hidden = false;
+    $('#iCounter').hidden = true;
+    $('#iTiles').replaceChildren(...S.items.map((i) => el('button', { type: 'button', class: `tile ${stockCls(i)}`, onclick: () => openCounter(i.id) },
+      el('span', { class: 'tile-emoji', text: i.emoji || '📦' }),
+      el('b', { class: 'tile-name', text: i.name }),
+      el('span', { class: 'tile-stock', text: stockText(i) }),
+      el('span', { class: 'stockbar' }, el('i', { style: { width: `${stockPct(i)}%` } })),
+      el('span', { class: 'tile-meta', text: `${i.people} ${i.people === 1 ? 'person' : 'people'}${i.given > i.people ? ` · ${i.given - i.people} repeats` : ''}` }),
+      stockCls(i) === 'out' ? el('span', { class: 'pill bad tile-flag', text: 'out' }) : stockCls(i) === 'low' ? el('span', { class: 'pill warn tile-flag', text: 'low' }) : null)));
+    if (!S.items.length) $('#iTiles').append(el('p', { class: 'muted', text: isAdmin() ? 'No items yet. Add one below.' : 'No items yet. An admin adds them.' }));
   }
-  function renderMissing() {
-    const item = Number($('#iPick').value);
-    if (!item) return;
-    const q = $('#iSearch').value.trim().toLowerCase().replace(/^#/, '');
-    const rows = PEOPLE.filter((p) => !p.disabled && !p.items.includes(item) && (!$('#iHereOnly').checked || p.checked_in_at)
+
+  async function openCounter(id, quietly) {
+    counterItem = id;
+    $('#iShelf').hidden = true;
+    $('#iCounter').hidden = false;
+    if (!quietly) { $('#icResult').hidden = true; $('#icCard').value = ''; $('#icSearch').value = ''; }
+    await loadCounter();
+    if (!quietly) setTimeout(() => $('#icCard').focus(), 0);
+    clearInterval(counterPoll);
+    // other volunteers may be giving the same thing from another laptop
+    counterPoll = setInterval(() => { if (view === 'handouts' && counterItem && document.visibilityState === 'visible') loadCounter().catch(() => {}); else if (view !== 'handouts') clearInterval(counterPoll); }, 8000);
+  }
+  function closeCounter() {
+    counterItem = null;
+    clearInterval(counterPoll);
+    refresh().then(renderHandouts);
+  }
+  async function loadCounter() {
+    counterData = await api(`/api/admin/items/${counterItem}`);
+    renderCounter();
+  }
+  function renderCounter() {
+    const { item: i, feed, most } = counterData;
+    $('#icTitle').textContent = `${i.emoji || '📦'} ${i.name}`;
+    $('#icStock').textContent = `${stockText(i)} · ${i.people} ${i.people === 1 ? 'person' : 'people'}`;
+    $('#icBar').style.width = `${stockPct(i)}%`;
+    $('#icBar').parentNode.className = `stockbar big ${stockCls(i)}`;
+    $('#icFeed').replaceChildren(...(feed.length ? feed.map((l) => el('div', { class: l.undone ? 'undone' : '' },
+      el('span', { class: 'row-main' }, el('span', { class: 'muted small mono', text: hm(l.ts) }), cchip(l.card_id), pchip(l.person_id, l.name),
+        l.qty_after > 1 ? el('span', { class: 'pill warn', text: `${l.qty_after}${ord(l.qty_after)}` }) : el('span', { class: 'pill ok', text: '1st' })),
+      l.undone ? el('span', { class: 'muted small', text: 'undone' }) : el('button', { class: 'btn sm ghost', type: 'button', text: 'Undo', onclick: run(async () => {
+        const r = await api(`/api/admin/handouts/undo/${l.id}`, 'POST', {});
+        toast(`Took back one from ${l.name}`);
+        counterData.item = r.item;
+        await loadCounter();
+      }) }))) : [el('p', { class: 'muted small', text: 'Nothing given yet.' })]));
+    $('#icMost').replaceChildren(...(most.length ? most.map((m) => el('div', {}, el('span', { class: 'row-main' }, pchip(m.person_id, m.name)), el('b', { text: `×${m.qty}` }))) : [el('p', { class: 'muted small', text: 'Nobody yet.' })]));
+    renderWithout();
+  }
+  const ord = (n) => (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+  function renderWithout() {
+    const item = counterItem;
+    const q = $('#icSearch').value.trim().toLowerCase().replace(/^#/, '');
+    const rows = PEOPLE.filter((p) => !p.disabled && p.checked_in_at && !p.items.includes(item)
       && (!q || p.cards.includes(Number(q)) || p.name.toLowerCase().includes(q)));
-    $('#iMissing').replaceChildren(el('p', { class: 'muted small', text: `${rows.length} still to get it` }), ...rows.slice(0, 60).map((p) => el('div', {},
+    $('#icWithoutN').textContent = String(rows.length);
+    $('#icWithout').replaceChildren(...(rows.length ? rows.slice(0, 40).map((p) => el('div', {},
       el('span', { class: 'row-main' }, pchip(p.id), p.cards.map(cchip)),
-      el('button', { class: 'btn sm accent', type: 'button', text: 'Given', onclick: run(async () => { await api(`/api/admin/people/${p.id}/items/${item}`, 'POST', { on: true }); await refresh(); renderHandouts(); }) }))));
+      p.cards.length ? el('button', { class: 'btn sm accent', type: 'button', text: 'Give', onclick: () => give(p.cards[0]) }) : el('span', { class: 'muted small', text: 'no card' })))
+      : [el('p', { class: 'muted small', text: q ? 'Nobody matches.' : 'Everyone here has one.' })]));
   }
-  for (const id of ['#iPick', '#iHereOnly']) $(id).addEventListener('change', renderMissing);
-  $('#iSearch').addEventListener('input', renderMissing);
+
+  function showResult(cls, big, small) {
+    const box = $('#icResult');
+    box.className = `result ${cls}`;
+    box.replaceChildren(...[el('b', { text: big }), small ? el('span', { text: small }) : null].filter(Boolean));
+    box.hidden = false;
+    box.classList.remove('pop');
+    void box.offsetWidth; // restart the pop animation
+    box.classList.add('pop');
+  }
+  let giving = false;
+  async function give(card, force) {
+    if (giving) return;
+    giving = true;
+    try {
+      const r = await api(`/api/admin/items/${counterItem}/give`, 'POST', { card, force: !!force });
+      const first = r.qty === 1;
+      sound(first ? 'ding' : 'dung');
+      showResult(first ? 'ok' : 'again', `${r.person.name} · card ${r.card}`,
+        first ? `First ${r.item.name}. Enjoy!` : `Already had ${r.qty - 1}. This is their ${r.qty}${ord(r.qty)} ${r.item.name}.`);
+      const p = PEOPLE.find((x) => x.id === r.person.id);
+      if (p && !p.items.includes(counterItem)) p.items.push(counterItem);
+      await loadCounter();
+    } catch (e) {
+      if (/out of stock/i.test(e.message) && !force) {
+        sound('buzz');
+        giving = false;
+        if (confirm(`${e.message}\n\nGive one anyway?`)) return give(card, true);
+        showResult('bad', 'Out of stock', 'Add stock with "+ Stock".');
+        return;
+      }
+      sound('buzz');
+      showResult('bad', e.message);
+    } finally {
+      giving = false;
+      $('#icCard').value = '';
+      $('#icCard').focus();
+    }
+  }
+  $('#icForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = $('#icCard').value.trim().replace(/^#/, '');
+    if (v) give(v);
+  });
+  $('#icSound').checked = soundsOn();
+  $('#icSound').addEventListener('change', (e) => { try { localStorage.setItem('hq-sounds', e.target.checked ? 'on' : 'off'); } catch {} if (e.target.checked) sound('ding'); });
+  $('#icSearch').addEventListener('input', renderWithout);
+  $('#iBack').addEventListener('click', closeCounter);
+  $('#icAdd').addEventListener('click', run(async () => {
+    const n = prompt(`How many ${counterData.item.name} just arrived?`, '');
+    if (n == null || !String(n).trim()) return;
+    const add = Math.round(Number(n));
+    if (!Number.isFinite(add) || add === 0) throw new Error('Type a number, like 50 (or -5 to take some off).');
+    counterData.item = await api(`/api/admin/items/${counterItem}`, 'PATCH', { add_stock: add });
+    toast(`Stock is now ${counterData.item.stock}`);
+    await loadCounter();
+  }));
+  $('#icEdit').addEventListener('click', run(async () => {
+    const i = counterData.item;
+    const name = prompt('Name', i.name);
+    if (name == null) return;
+    const emoji = prompt('Emoji for the tile', i.emoji || '');
+    if (emoji == null) return;
+    const stock = prompt('Total stock (empty = not counted)', i.stock ?? '');
+    if (stock == null) return;
+    await api(`/api/admin/items/${i.id}`, 'PATCH', { name, emoji, stock });
+    await refresh();
+    await loadCounter();
+    toast('Saved');
+  }));
+  $('#icDelete').addEventListener('click', run(async () => {
+    const i = counterData.item;
+    if (!confirm(`Delete ${i.name}? Who-got-it records (${i.given} given) go too.`)) return;
+    await api(`/api/admin/items/${i.id}`, 'DELETE');
+    toast(`Deleted ${i.name}`);
+    closeCounter();
+  }));
   $('#iForm').addEventListener('submit', run(async (e) => {
     e.preventDefault();
-    await api('/api/admin/items', 'POST', Object.fromEntries(new FormData(e.currentTarget)));
-    e.currentTarget.reset();
+    const f = e.currentTarget;
+    await api('/api/admin/items', 'POST', Object.fromEntries(new FormData(f)));
+    f.reset();
     await refresh();
     renderHandouts();
   }));
