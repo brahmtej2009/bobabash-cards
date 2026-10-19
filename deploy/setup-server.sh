@@ -2,7 +2,7 @@
 # One-time setup of the cards dashboard inside LXC 140 on paid6. Safe to re-run: never touches data or the env file.
 #   bash deploy/setup-server.sh
 set -euo pipefail
-PVE="${PVE:-root@192.168.1.64}"
+PVE="${PVE:-$(cat "$(dirname "$0")/.host" 2>/dev/null)}"; [ -n "$PVE" ] || { echo "Put root@<proxmox-host> in deploy/.host (gitignored) or set PVE"; exit 1; }
 CTID="${CTID:-140}"
 
 ssh "$PVE" "pct exec $CTID -- bash -s" <<'REMOTE'

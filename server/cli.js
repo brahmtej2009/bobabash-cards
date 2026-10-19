@@ -9,6 +9,7 @@ const mail = require('./mail');
 
 const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data'));
 const db = require('./db').open(DATA_DIR);
+mail.use(db);
 const ACTOR = `cli:${process.env.SUDO_USER || process.env.USER || 'root'}`;
 
 const HELP = `cards: Boba Bash event control
