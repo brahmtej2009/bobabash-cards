@@ -4,7 +4,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { now, getSettings, setSettings, resolve, projectUrl, parseJson } = require('./util');
+const { now, getSettings, setSettings, resolve, projectUrl, parseJson, DEFAULT_SETTINGS } = require('./util');
 const { renderProfile, vcard, hasContact } = require('./profile');
 
 const API = 'https://api.github.com';
@@ -65,7 +65,7 @@ function buildMap(db, s = getSettings(db)) {
     const r = resolve(c, people.get(c.person_id) || null, s);
     cards[c.id] = r.kind === 'go' ? { k: 'go', u: r.url, ...(r.msg ? { m: r.msg } : {}) } : { k: r.kind };
   }
-  return { s: Number(s.splash_ms) || 0, live: s.dashboard_url || '', cards };
+  return { s: Number(s.splash_ms) || 0, live: s.dashboard_url || DEFAULT_SETTINGS.dashboard_url, cards };
 }
 
 // ---------- host 1 ----------
@@ -233,7 +233,7 @@ async function clearRepos(db) {
       const st = await repoState(repo);
       const want = {};
       for (const p of st.files.keys()) if (match(p)) want[p] = null;
-      if (key === 'redirect') want['map.json'] = Buffer.from(JSON.stringify({ s: Number(s.splash_ms) || 0, live: s.dashboard_url || '', cards: {} }, null, 1) + '\n');
+      if (key === 'redirect') want['map.json'] = Buffer.from(JSON.stringify({ s: Number(s.splash_ms) || 0, live: s.dashboard_url || DEFAULT_SETTINGS.dashboard_url, cards: {} }, null, 1) + '\n');
       const removed = Object.values(want).filter((v) => v === null).length;
       if (removed || key === 'redirect') await commit(repo, st, want, `Cards: start fresh (${removed} files removed)`);
       out[key] = { repo, removed };

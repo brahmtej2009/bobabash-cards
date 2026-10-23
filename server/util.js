@@ -100,7 +100,7 @@ const DEFAULT_SETTINGS = {
   repo: 'bobabash/sites',
   project_template: 'https://bobabash.github.io/sites/{id}/',
   // host 3: this dashboard, as the world reaches it (the redirect pages ask it live)
-  dashboard_url: '',
+  dashboard_url: 'https://cards.boba-bash.xyz',
   inactive_url: '',
   splash_ms: '5000',
   instructions_md: '',
