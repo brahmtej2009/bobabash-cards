@@ -759,9 +759,10 @@ module.exports = function admin(ctx) {
     U.mustLimit(db, `give:${req.actor}`, 1500, 3600e3);
     const it = itemRow(Number(req.params.id));
     if (!it) fail(404, 'No such item.');
-    const raw = String(req.body.card ?? '').trim().replace(/^#/, '');
-    if (!/^\d{1,5}$/.test(raw)) fail(400, 'Type the card number.');
-    const card = core.getCard(db, Number(raw));
+    const num = U.parseCard(req.body.card);
+    if (num == null) fail(400, 'Type the card number, like grn07 or 7.');
+    const raw = U.cardLabel(num);
+    const card = core.getCard(db, num);
     if (!card) fail(404, `There is no card ${raw}.`);
     if (!card.person_id) fail(400, `Card ${raw} is not given to anyone yet. Register it at the Desk first.`);
     const p = core.getPerson(db, card.person_id);

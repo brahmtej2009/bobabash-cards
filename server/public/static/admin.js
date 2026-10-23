@@ -77,8 +77,12 @@
     const p = personById(id);
     return el('button', { class: 'pid', type: 'button', 'data-person': id, title: p ? [p.email, p.phone].filter(Boolean).join(' · ') : '' }, label || p?.name || `#${id}`);
   }
+  // printed on the cards as grn07; typed as grn07, #7 or 7
+  const cardLabel = (id) => `grn${String(id).padStart(2, '0')}`;
+  const parseCard = (v) => { const m = /^\s*(?:grn|#)?\s*0*(\d{1,5})\s*$/i.exec(String(v ?? '')); return m ? Number(m[1]) : null; };
   function cchip(id) {
-    return el('button', { class: 'cid', type: 'button', 'data-card': id }, `#${id}`);
+    const c = CARDS.find((x) => x.id === id);
+    return el('button', { class: 'cid', type: 'button', 'data-card': id, title: c?.crew ? `${c.crew} crew` : '' }, cardLabel(id));
   }
   function tchip(id) {
     const t = teamById(id);
@@ -194,7 +198,7 @@
       if (!q) { box.hidden = true; return; }
       const r = await api(`/api/admin/search?q=${encodeURIComponent(q)}`);
       const rows = [
-        ...r.cards.map((c) => el('button', { type: 'button', onclick: () => { box.hidden = true; gs.value = ''; c.person_id ? openPerson(c.person_id) : openCard(c.id); } }, el('b', { text: `Card ${c.id}` }), el('span', { class: 'muted', text: c.name || 'blank' }))),
+        ...r.cards.map((c) => el('button', { type: 'button', onclick: () => { box.hidden = true; gs.value = ''; c.person_id ? openPerson(c.person_id) : openCard(c.id); } }, el('b', { text: cardLabel(c.id) }), el('span', { class: 'muted', text: c.name || 'blank' }))),
         ...r.people.map((p) => el('button', { type: 'button', onclick: () => { box.hidden = true; gs.value = ''; openPerson(p.id); } }, el('b', { text: p.name }), el('span', { class: 'muted', text: [p.email, `#${p.id}`].filter(Boolean).join(' · ') }))),
       ];
       box.replaceChildren(...(rows.length ? rows : [el('button', { type: 'button', disabled: true, text: 'Nobody matches.' })]));
@@ -216,7 +220,7 @@
   // in their hand) and types the PIN printed on it. "No card for now": give one later from their panel.
   let cardTouched = false;
   function fillNextCard(force) {
-    if (S && (force || !cardTouched)) { reg.card.value = S.next_card; cardTouched = false; }
+    if (S && (force || !cardTouched)) { reg.card.value = cardLabel(S.next_card); cardTouched = false; }
   }
   function renderCardMode() {
     const mode = reg.cardmode.value;
@@ -224,16 +228,19 @@
     const hint = $('#regHint');
     if (mode === 'none') { hint.textContent = 'They can set up later by email, and you can give a card any time from their panel.'; return; }
     fillNextCard(false);
-    const id = Number(reg.card.value);
+    const id = parseCard(reg.card.value);
     const c = id && CARDS.find((x) => x.id === id);
-    hint.textContent = !id ? 'Type the card number.'
-      : c?.person ? `Card ${id} already belongs to ${c.person.name}. Pick another.`
-        : c?.status === 'disabled' ? `Card ${id} is switched off. Pick another.`
-          : 'Type the PIN printed on the card. You can change the number or PIN later from their panel.';
+    // cards loaded from the print file already know their PIN: no typing, no typos
+    $('#pinField').hidden = !!c;
+    hint.textContent = !id ? 'Type the ID printed on the front, like grn07.'
+      : c?.person ? `${cardLabel(id)} already belongs to ${c.person.name}. Pick another.`
+        : c?.status === 'disabled' ? `${cardLabel(id)} is switched off. Pick another.`
+          : c ? `${cardLabel(id)}${c.crew ? ` · ${c.crew} crew` : ''} · PIN already on file. They set up at /me with this card ID, its PIN and their email.`
+            : `${cardLabel(id)} is not in the system yet. Type the PIN from its back to add it.`;
   }
   for (const r of $$('[name=cardmode]', reg)) r.addEventListener('change', renderCardMode);
   reg.card.addEventListener('input', () => { cardTouched = true; renderCardMode(); });
-  $('#useNext').addEventListener('click', () => { fillNextCard(true); renderCardMode(); reg.pin.focus(); });
+  $('#useNext').addEventListener('click', () => { fillNextCard(true); renderCardMode(); });
   let lastReg = null;
   reg.addEventListener('submit', run(async (e) => {
     e.preventDefault();
@@ -248,10 +255,13 @@
       items: fd.getAll('item').map(Number),
     };
     if (mode !== 'none') {
-      if (!/^\d+$/.test(data.card)) { $('.err', reg).textContent = 'Type the card number.'; return; }
-      const c = CARDS.find((x) => x.id === Number(data.card));
-      if (c?.person) { $('.err', reg).textContent = `Card ${data.card} already belongs to ${c.person.name}.`; return; }
-      if (!/^\d{4,8}$/.test(data.pin)) { $('.err', reg).textContent = 'Type the PIN printed on the card (4 to 8 digits).'; reg.pin.focus(); return; }
+      const num = parseCard(data.card);
+      if (num == null) { $('.err', reg).textContent = 'Type the card ID, like grn07.'; return; }
+      data.card = String(num);
+      const c = CARDS.find((x) => x.id === num);
+      if (c?.person) { $('.err', reg).textContent = `${cardLabel(num)} already belongs to ${c.person.name}.`; return; }
+      if (c) data.pin = ''; // on file already
+      else if (!/^\d{4,8}$/.test(data.pin)) { $('.err', reg).textContent = 'This card is not in the system yet. Type the PIN from its back (4 to 8 digits).'; reg.pin.focus(); return; }
     }
     let r;
     try { r = await api('/api/admin/people', 'POST', data); } catch (x) { $('.err', reg).textContent = x.message; return; }
@@ -272,12 +282,12 @@
     $('#rPrint').hidden = !r.card;
     $('#rErr').textContent = r.card_error ? `Card not given: ${r.card_error}` : '';
     if (r.card) {
-      $('#rId').textContent = r.card.id;
+      $('#rId').textContent = `${cardLabel(r.card.id)}${r.card.crew ? ` · ${r.card.crew}` : ''}`;
       $('#rPin').textContent = r.card.pin || 'on file';
       $('#rQr').replaceChildren(qrSvg(r.card.url));
       $('#rUrl').textContent = `Flash ${short(r.card.url)}`;
     } else $('#rUrl').textContent = r.card_error ? '' : 'No card. They can set up with their email.';
-    $('#rTell').textContent = `Tell them: set up at ${short(S.settings.dashboard_url || location.origin)}/me${r.card ? ' with the card number and PIN' : ' with this email'}.`;
+    $('#rTell').textContent = `Tell them: set up at ${short(S.settings.dashboard_url || location.origin)}/me${r.card ? ` with ${cardLabel(r.card.id)}, the PIN on its back and this email` : ' with this email'}.`;
   }
   $('#rNext').addEventListener('click', () => { $('#regResult').hidden = true; reg.name.focus(); });
   $('#rOpen').addEventListener('click', () => lastReg && openPerson(lastReg.person_id));
@@ -646,7 +656,7 @@
       el('button', { class: 'btn', type: 'button', text: 'Set this PIN', onclick: () => setPin(pinIn.value.trim())() }),
       el('button', { class: 'btn ghost', type: 'button', text: 'Make one up', onclick: setPin(null) })) : el('p', { class: 'muted small', text: 'Only admins change PINs.' });
 
-    showDrawer(`Card ${c.id}`, [el('span', { class: `pill ${c.status === 'active' ? 'active' : 'disabled'}`, text: c.status === 'active' ? 'on' : 'off' }), c.person ? null : el('span', { class: 'pill', text: 'blank' })], [
+    showDrawer(`Card ${cardLabel(c.id)}`, [c.crew ? el('span', { class: 'pill blue', text: c.crew }) : null, el('span', { class: `pill ${c.status === 'active' ? 'active' : 'disabled'}`, text: c.status === 'active' ? 'on' : 'off' }), c.person ? null : el('span', { class: 'pill', text: 'blank' })], [
       sec('Holder', holder),
       sec('PIN', pinBox, reveal),
       sec('Where a tap goes',
@@ -1152,9 +1162,9 @@
       : [el('p', { class: 'muted small', text: q ? 'Nobody matches.' : 'Everyone here has one.' })]));
   }
 
-  function showResult(cls, big, small) {
+  function showGive(cls, big, small) {
     const box = $('#icResult');
-    box.className = `result ${cls}`;
+    box.className = `give-result ${cls}`;
     box.replaceChildren(...[el('b', { text: big }), small ? el('span', { text: small }) : null].filter(Boolean));
     box.hidden = false;
     box.classList.remove('pop');
@@ -1169,7 +1179,7 @@
       const r = await api(`/api/admin/items/${counterItem}/give`, 'POST', { card, force: !!force });
       const first = r.qty === 1;
       sound(first ? 'ding' : 'dung');
-      showResult(first ? 'ok' : 'again', `${r.person.name} · card ${r.card}`,
+      showGive(first ? 'ok' : 'again', `${r.person.name} · ${cardLabel(r.card)}${r.person.team ? ` · ${r.person.team}` : ''}`,
         first ? `First ${r.item.name}. Enjoy!` : `Already had ${r.qty - 1}. This is their ${r.qty}${ord(r.qty)} ${r.item.name}.`);
       const p = PEOPLE.find((x) => x.id === r.person.id);
       if (p && !p.items.includes(counterItem)) p.items.push(counterItem);
@@ -1179,11 +1189,11 @@
         sound('buzz');
         giving = false;
         if (confirm(`${e.message}\n\nGive one anyway?`)) return give(card, true);
-        showResult('bad', 'Out of stock', 'Add stock with "+ Stock".');
+        showGive('bad', 'Out of stock', 'Add stock with "+ Stock".');
         return;
       }
       sound('buzz');
-      showResult('bad', e.message);
+      showGive('bad', e.message);
     } finally {
       giving = false;
       $('#icCard').value = '';
@@ -1192,7 +1202,7 @@
   }
   $('#icForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    const v = $('#icCard').value.trim().replace(/^#/, '');
+    const v = $('#icCard').value.trim();
     if (v) give(v);
   });
   $('#icSound').checked = soundsOn();

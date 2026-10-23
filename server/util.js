@@ -81,8 +81,12 @@ function cleanPassword(p) {
   return s;
 }
 
+// what's printed on the cards is "grn07"; people may type that, "#7" or just "7"
+const CARD_RE = /^\s*(?:grn|#)?\s*0*(\d{1,5})\s*$/i;
+const parseCard = (v) => { const m = CARD_RE.exec(String(v ?? '')); return m ? Number(m[1]) : null; };
+const cardLabel = (id) => `grn${String(id).padStart(2, '0')}`;
 function cardId(v) {
-  const n = Number(String(v ?? '').trim());
+  const n = parseCard(v) ?? NaN;
   if (!Number.isInteger(n) || n < 1 || n > 99999) fail(400, 'Card numbers are whole numbers.');
   return n;
 }
@@ -202,6 +206,6 @@ module.exports = {
   now, HttpError, fail, randomHex, randomDigits, sha256, hashSecret, checkSecret, safeEqual, cleanPassword,
   hashPin: hashSecret, checkPin: checkSecret,
   cleanEmail, cleanUrl, cleanText, cleanGithub, cardId,
-  DEFAULT_SETTINGS, getSettings, setSettings, globalLocked, cardLocked, projectUrl, profileUrl, tagsOf, parseJson, overrideActive, resolve,
+  parseCard, cardLabel, DEFAULT_SETTINGS, getSettings, setSettings, globalLocked, cardLocked, projectUrl, profileUrl, tagsOf, parseJson, overrideActive, resolve,
   limit, mustLimit, audit,
 };

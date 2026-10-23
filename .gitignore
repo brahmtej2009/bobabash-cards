@@ -3,3 +3,4 @@ server/data
 .env
 ORGANISER-LOGIN.txt
 deploy/.host
+server/data-*

@@ -41,6 +41,7 @@
     if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
     return fmt(t);
   };
+  const cardLabel = (id) => `grn${String(id).padStart(2, '0')}`;
   const short = (u) => String(u || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
   const initials = (name) => String(name || '?').trim().split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
   const errOf = (f) => $('.err', f);
@@ -82,7 +83,7 @@
     $$('#setupMode button').forEach((x) => x.classList.toggle('on', x === b));
     $$('[data-only=card]').forEach((x) => (x.hidden = setupMode !== 'card'));
     $$('[data-only=signup]').forEach((x) => (x.hidden = setupMode !== 'email' || !PUB?.owner_signup));
-    $('#setupHint').textContent = setupMode === 'card' ? 'Card number and PIN are printed on your card.' : 'Use the email the desk registered you with. We email you a code.';
+    $('#setupHint').textContent = setupMode === 'card' ? 'Card ID is on the front of your Boba Pass, the PIN is on the back.' : 'Use the email the desk registered you with. We email you a code.';
     $('#setupBtn').textContent = setupMode === 'card' ? 'Set up and log in' : 'Send me a code';
   }));
   const samePw = (f) => { if (f.password2 && f.password.value !== f.password2.value) throw new Error('The two passwords do not match.'); };
@@ -300,7 +301,7 @@
     return el('div', { class: `bcard${big ? ' big' : ''}${k.status === 'disabled' ? ' off' : ''}` },
       el('div', {},
         el('span', { class: 'k', text: `${C.public.event_name} · card` }),
-        el('span', { class: 'num', text: `#${k.id}` }),
+        el('span', { class: 'num', text: cardLabel(k.id) }),
         el('span', { class: 'nm', text: C.name }),
         el('div', { class: 'to' }, k.status === 'disabled' ? 'This card is switched off.' : ['A tap opens ', el('a', { href: k.now_url, target: '_blank', rel: 'noopener', text: short(k.now_url) })])),
       el('div', { class: 'qr' }, qrSvg(k.url).node));
@@ -355,7 +356,7 @@
     const first = c.name.split(/\s+/)[0];
     fill($('#meBubble'), initials(c.name));
     $('#meName').textContent = c.name;
-    $('#meSub').textContent = c.cards.length ? `Card #${c.cards.map((x) => x.id).join(', #')}` : 'No card yet';
+    $('#meSub').textContent = c.cards.length ? c.cards.map((x) => cardLabel(x.id)).join(', ') : 'No card yet';
     $('#hello').textContent = `Hey ${first}`;
     fill($('#statusChips'),
       el('span', { class: `chip ${c.checked_in_at ? 'yes' : 'no'}`, text: c.checked_in_at ? `Checked in at ${time(c.checked_in_at)}` : 'Not checked in yet' }),

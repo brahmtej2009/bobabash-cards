@@ -88,8 +88,8 @@
                 <label class="check"><input type="radio" name="cardmode" value="none"> No card for now</label>
               </div>
               <div class="grid two cardfields" id="cardFields">
-                <label class="field"><span>Card number <button class="linkbtn" type="button" id="useNext">use next free</button></span><input name="card" inputmode="numeric" autocomplete="off" maxlength="5"></label>
-                <label class="field"><span>PIN printed on that card</span><input name="pin" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="4 to 8 digits"></label>
+                <label class="field"><span>Card ID on the front <button class="linkbtn" type="button" id="useNext">use next free</button></span><input name="card" autocomplete="off" maxlength="8" placeholder="grn07"></label>
+                <label class="field" id="pinField"><span>PIN on the back</span><input name="pin" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="4 to 8 digits"></label>
               </div>
               <p class="muted small" id="regHint"></p>
             </div>
@@ -291,12 +291,12 @@
               <form class="block give" id="icForm" autocomplete="off">
                 <label for="icCard"><b>Card number</b></label>
                 <div class="inline">
-                  <input id="icCard" name="card" inputmode="numeric" pattern="#?[0-9]*" maxlength="6" placeholder="17" required>
+                  <input id="icCard" name="card" maxlength="8" placeholder="grn07" required autocapitalize="off" spellcheck="false">
                   <button class="btn accent big" type="submit">Give 1</button>
                 </div>
                 <label class="check small"><input type="checkbox" id="icSound" checked> Sounds</label>
               </form>
-              <div class="result" id="icResult" hidden></div>
+              <div class="give-result" id="icResult" hidden></div>
               <div class="block">
                 <div class="head"><h3>Just now</h3><span class="muted small">Typo? Undo it here.</span></div>
                 <div class="list flat" id="icFeed"></div>
@@ -336,7 +336,7 @@
           </form>
           <form class="block" id="cardImport">
             <h3>Add many printed cards</h3>
-            <textarea name="text" rows="3" placeholder="One card per line: ID,PIN&#10;1,4821&#10;2,9037"></textarea>
+            <textarea name="text" rows="3" placeholder="One card per line: ID,PIN,Crew (crew optional)&#10;grn01,1987,Club&#10;2,2846"></textarea>
             <div class="inline wrap opts">
               <label class="check"><input type="checkbox" name="overwrite"> Update the PIN of cards that already exist</label>
               <button class="btn" type="submit">Import</button>

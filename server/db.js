@@ -9,6 +9,7 @@ const MIGRATIONS = {
   log: { person_id: 'INTEGER', team_id: 'INTEGER' },
   files: { person_id: 'INTEGER' },
   items: { emoji: 'TEXT' },
+  cards: { crew: 'TEXT' },
   handouts: { qty: 'INTEGER NOT NULL DEFAULT 1' },
 };
 
