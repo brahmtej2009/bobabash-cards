@@ -136,26 +136,39 @@ async function syncRedirectRepo(db, s, dataDir) {
 }
 
 // ---------- host 2 ----------
+// Projects can live in their own repo (sites_dir empty) or in a folder of the Pages repo (sites_dir = 'sites').
+function sitesPrefix(s) {
+  const d = String(s.sites_dir || '').replace(/^\/+|\/+$/g, '');
+  return d ? `${d}/` : '';
+}
+// "sites/17/index.html" -> 17, anything outside a card folder -> null
+function folderOf(s, file) {
+  const P = sitesPrefix(s);
+  if (!file.startsWith(P)) return null;
+  const m = /^(\d+)\//.exec(file.slice(P.length));
+  return m ? Number(m[1]) : null;
+}
 async function syncSitesRepo(db, s) {
   const repo = s.repo;
   if (!validRepo(repo)) throw new Error('Set the sites repo as owner/name under Control.');
+  const P = sitesPrefix(s);
   const st = await repoState(repo);
-  const tplSha = st.files.get('template/index.html');
-  if (!tplSha) return { repo, changed: 0, note: 'No template/index.html in the sites repo yet, so no folders were made.' };
-  const have = new Set([...st.files.keys()].map((p) => p.split('/')[0]));
+  const tplSha = st.files.get(`${P}template/index.html`);
+  if (!tplSha) return { repo, changed: 0, note: `No ${P}template/index.html in the sites repo yet, so no folders were made.` };
+  const have = new Set([...st.files.keys()].filter((p) => p.startsWith(P)).map((p) => p.slice(P.length).split('/')[0]));
   const missing = db.prepare("SELECT id FROM cards WHERE status = 'active' AND person_id IS NOT NULL ORDER BY id").all().map((r) => r.id).filter((id) => !have.has(String(id)));
   const want = {};
   if (missing.length) {
     const tpl = (await readBlob(repo, tplSha)).toString('utf8');
-    for (const id of missing) want[`${id}/index.html`] = Buffer.from(tpl.replaceAll('{{id}}', String(id)));
+    for (const id of missing) want[`${P}${id}/index.html`] = Buffer.from(tpl.replaceAll('{{id}}', String(id)));
   }
   // The printed QR codes open sites/<n> (no slash). <n>.html answers that address: the logo, then it asks the
   // dashboard where the card goes, so QR scans follow the same settings as taps. The project stays in <n>/.
-  const loaderSha = st.files.get('loader.html');
+  const loaderSha = st.files.get(`${P}loader.html`);
   let loaders = 0;
   if (loaderSha) {
     for (const { id } of db.prepare('SELECT id FROM cards ORDER BY id').all()) {
-      if (st.files.get(`${id}.html`) !== loaderSha) { want[`${id}.html`] = 'loader'; loaders++; }
+      if (st.files.get(`${P}${id}.html`) !== loaderSha) { want[`${P}${id}.html`] = 'loader'; loaders++; }
     }
     if (loaders) { const buf = await readBlob(repo, loaderSha); for (const k of Object.keys(want)) if (want[k] === 'loader') want[k] = buf; }
   }
@@ -202,6 +215,7 @@ function schedule(db, dataDir, delay = 8000) {
 
 // ---------- pull requests ----------
 async function syncPrs(db, repo) {
+  const s = getSettings(db);
   if (!validRepo(repo)) throw new Error('Set the sites repo as owner/name first.');
   const prs = [];
   for (let page = 1; page <= 5; page++) {
@@ -222,8 +236,8 @@ async function syncPrs(db, repo) {
     let outside = 0;
     for (const f of files) {
       for (const name of [f.filename, f.previous_filename].filter(Boolean)) {
-        const m = /^(\d+)\//.exec(name);
-        if (m) folders.add(Number(m[1])); else outside = 1;
+        const n = folderOf(s, name);
+        if (n != null) folders.add(n); else outside = 1;
       }
     }
     const reviews = await gh(`/repos/${repo}/pulls/${pr.number}/reviews?per_page=100`);
@@ -247,7 +261,7 @@ async function clearRepos(db) {
   const out = {};
   for (const [key, repo, match] of [
     ['redirect', s.redirect_repo, (p) => /^\d+\//.test(p) || p.startsWith('p/')],
-    ['sites', s.repo, (p) => /^\d+\//.test(p)],
+    ['sites', s.repo, (p) => folderOf(s, p) != null],
   ]) {
     try {
       if (!validRepo(repo)) throw new Error(`Repo not set (${key}).`);

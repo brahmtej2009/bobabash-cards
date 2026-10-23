@@ -937,6 +937,7 @@ module.exports = function admin(ctx) {
     }
     if ('redirect_repo' in b) set.redirect_repo = repo(b.redirect_repo);
     if ('repo' in b) set.repo = repo(b.repo);
+    if ('sites_dir' in b) { const d = String(b.sites_dir || '').trim().replace(/^\/+|\/+$/g, ''); if (d && !/^[A-Za-z0-9_-]{1,40}$/.test(d)) fail(400, 'Projects folder: letters, numbers, - or _ only.'); set.sites_dir = d; }
     if ('inactive_url' in b) set.inactive_url = U.cleanUrl(b.inactive_url);
     if ('splash_ms' in b) {
       const n = Math.round(Number(b.splash_ms));
