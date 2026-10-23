@@ -18,6 +18,7 @@ const DEV = process.env.DEV === '1';
 
 const db = require('./db').open(DATA_DIR);
 mail.use(db);
+gh.use(db);
 fs.mkdirSync(UPLOADS, { recursive: true });
 
 // Sessions slide: every visit pushes the expiry out again, so people only get logged out after

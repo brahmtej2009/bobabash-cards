@@ -144,7 +144,7 @@ module.exports = function admin(ctx) {
         help_open: db.prepare("SELECT COUNT(*) n FROM help WHERE status != 'done'").get().n,
         taps_24h: db.prepare('SELECT COUNT(*) n FROM scans WHERE ts > ?').get(now() - 86400e3).n,
       },
-      github: { token: gh.hasToken(), last_sync: Number(s.last_publish || 0), problem: s.last_publish_error },
+      github: { token: gh.hasToken(), source: gh.tokenSource(), last_sync: Number(s.last_publish || 0), problem: s.last_publish_error },
       smtp: mail.ready(),
       mail: mail.status(),
     };
@@ -966,6 +966,32 @@ module.exports = function admin(ctx) {
   }));
 
   // ---------- GitHub ----------
+  // paste a GitHub token in Setup; it is checked against both repos, stored server-side, never shown again
+  app.post('/api/admin/github/token', wrap(async (req) => {
+    needAdmin(req);
+    if (req.body?.clear) {
+      db.prepare("DELETE FROM secrets WHERE k = 'github'").run();
+      U.audit(db, req.actor, 'removed the GitHub token from the dashboard');
+      return { ok: true, source: gh.tokenSource() };
+    }
+    const t = String(req.body?.token || '').trim();
+    if (!/^(github_pat_|ghp_|gho_|ghu_)[A-Za-z0-9_]{20,}$/.test(t)) fail(400, 'That does not look like a GitHub token. It starts with github_pat_ or ghp_.');
+    const s = U.getSettings(db);
+    const old = db.prepare("SELECT v FROM secrets WHERE k = 'github'").get()?.v;
+    db.prepare("INSERT INTO secrets (k, v) VALUES ('github', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v").run(t);
+    const bad = [];
+    for (const repo of [s.redirect_repo, s.repo].filter(Boolean)) {
+      try { if (!(await gh.canPush(repo))) bad.push(`${repo}: no write access`); } catch (e) { bad.push(`${repo}: ${e.message}`); }
+    }
+    if (bad.length) {
+      if (old) db.prepare("UPDATE secrets SET v = ? WHERE k = 'github'").run(old); else db.prepare("DELETE FROM secrets WHERE k = 'github'").run();
+      fail(400, `Not saved. ${bad.join('; ')}. Give the token Contents + Pull requests read/write on both repos.`);
+    }
+    U.audit(db, req.actor, 'saved a GitHub token in the dashboard');
+    sync();
+    return { ok: true, source: 'dashboard' };
+  }));
+
   app.post('/api/admin/github/sync', wrap(async (req) => {
     needAdmin(req);
     U.mustLimit(db, 'gh-sync', 10, 60e3, 'Syncing too often. Wait a minute.');

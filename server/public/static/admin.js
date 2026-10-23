@@ -1299,7 +1299,7 @@
   function renderSetup() {
     for (const k of SETUP_KEYS) $(`[data-page=setup] [name=${k}]`).value = S.settings[k] || '';
     renderMail();
-    $('#ghState').textContent = !S.github.token ? 'No GITHUB_TOKEN on the server. Add it to /etc/cards.env and restart.'
+    $('#ghState').textContent = !S.github.token ? 'No GitHub token yet. Paste one below so the dashboard can write the card pages and new project folders.'
       : S.github.problem ? `Last sync ${ago(S.github.last_sync)}. ${S.github.problem}` : S.github.last_sync ? `Last synced ${ago(S.github.last_sync)}. All good.` : 'Not synced yet.';
   }
   // ---------- outgoing mail ----------
@@ -1350,6 +1350,19 @@
   }));
 
   $('#saveSetup').addEventListener('click', run(() => saveSettings(Object.fromEntries(SETUP_KEYS.map((k) => [k, $(`[data-page=setup] [name=${k}]`).value])))));
+  $('#ghTokenForm').addEventListener('submit', run(async (e) => {
+    e.preventDefault();
+    const f = e.currentTarget;
+    const b = $('button', f);
+    b.disabled = true;
+    try {
+      await api('/api/admin/github/token', 'POST', { token: f.token.value });
+      f.reset();
+      toast('Token saved and checked. Syncing now.');
+      await refresh();
+      renderSetup();
+    } finally { b.disabled = false; }
+  }));
   $('#syncNow').addEventListener('click', run(async (e) => {
     const b = e.currentTarget;
     b.disabled = true;

@@ -535,6 +535,11 @@
           <h3>GitHub sync</h3>
           <p class="muted">Writes <code>map.json</code>, a page per card copied from <code>card.html</code>, and profile pages into the redirect repo, and a folder per new card from <code>template/</code> into the sites repo. Runs a few seconds after every change and every 10 minutes.</p>
           <p class="small" id="ghState"></p>
+          <form class="inline wrap" id="ghTokenForm" autocomplete="off">
+            <input name="token" type="password" placeholder="Paste a GitHub token (github_pat_…)" autocomplete="new-password" class="grow">
+            <button class="btn" type="submit">Save token</button>
+          </form>
+          <p class="muted small">Make it at github.com → Settings → Developer settings → Fine-grained tokens. Resource owner: the account that owns the repos. Repositories: the two above. Permissions: Contents and Pull requests, read and write. It is checked, kept on the server, and never shown again.</p>
           <div class="actions"><button class="btn" id="syncNow">Sync now</button></div>
         </div>
         <form class="block" id="mailForm" autocomplete="off">
