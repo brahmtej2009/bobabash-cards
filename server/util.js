@@ -101,7 +101,9 @@ const DEFAULT_SETTINGS = {
   card_base: 'https://bobabash.github.io',
   redirect_repo: 'bobabash/bobabash.github.io',
   // host 2: everyone's projects, one folder per card
-  repo: 'bobabash/sites',
+  // one GitHub Pages repo can hold both: redirect pages at the root, projects under sites_dir/
+  repo: 'bobabash/bobabash.github.io',
+  sites_dir: 'sites',
   project_template: 'https://bobabash.github.io/sites/{id}/',
   // host 3: this dashboard, as the world reaches it (the redirect pages ask it live)
   dashboard_url: 'https://cards.boba-bash.xyz',

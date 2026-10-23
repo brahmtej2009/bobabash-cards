@@ -1305,7 +1305,7 @@
   })));
 
   // ================= setup =================
-  const SETUP_KEYS = ['card_base', 'redirect_repo', 'repo', 'project_template', 'dashboard_url'];
+  const SETUP_KEYS = ['card_base', 'redirect_repo', 'repo', 'sites_dir', 'project_template', 'dashboard_url'];
   function renderSetup() {
     for (const k of SETUP_KEYS) $(`[data-page=setup] [name=${k}]`).value = S.settings[k] || '';
     renderMail();
