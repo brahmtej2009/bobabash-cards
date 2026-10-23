@@ -19,7 +19,7 @@
 
     <form id="login" class="box" data-view="login">
       <h1>Welcome back</h1>
-      <label class="f"><span>Email or card number</span><input name="login" autocomplete="username" required></label>
+      <label class="f"><span>Email or card ID (like grn07)</span><input name="login" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
       <label class="f"><span>Password</span><input name="password" type="password" autocomplete="current-password" required></label>
       <p class="err" role="alert"></p>
       <button class="btn big" type="submit">Log in</button>
@@ -29,10 +29,10 @@
     <form id="setup" class="box" data-view="setup" hidden>
       <h1>Set up your card</h1>
       <div class="seg" id="setupMode"><button type="button" data-sm="card" class="on">I have a card</button><button type="button" data-sm="email">No card yet</button></div>
-      <p class="sub" id="setupHint">Card number and PIN are printed on your card.</p>
+      <p class="sub" id="setupHint">Card ID is on the front of your Boba Pass, the PIN is on the back.</p>
       <div class="row" data-only="card">
-        <label class="f"><span>Card number</span><input name="card" inputmode="numeric" autocomplete="off" maxlength="5"></label>
-        <label class="f"><span>PIN</span><input name="pin" inputmode="numeric" autocomplete="off" maxlength="8"></label>
+        <label class="f"><span>Card ID <small>(front)</small></span><input name="card" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="8" placeholder="grn07"></label>
+        <label class="f"><span>PIN <small>(back)</small></span><input name="pin" inputmode="numeric" autocomplete="off" maxlength="8"></label>
       </div>
       <label class="f" data-only="signup" hidden><span>Your name</span><input name="name" autocomplete="name" maxlength="120"></label>
       <label class="f"><span>Email <small>(the one you gave at the desk)</small></span><input name="email" type="email" autocomplete="email" required></label>
@@ -74,7 +74,7 @@
       </form>
       <form id="forgotPin" hidden>
         <div class="row">
-          <label class="f"><span>Card number</span><input name="card" inputmode="numeric" maxlength="5" required></label>
+          <label class="f"><span>Card ID <small>(front)</small></span><input name="card" maxlength="8" placeholder="grn07" autocapitalize="off" spellcheck="false" required></label>
           <label class="f"><span>PIN</span><input name="pin" inputmode="numeric" maxlength="8" required></label>
         </div>
         <div class="row">

@@ -86,8 +86,8 @@ module.exports = function owner(ctx) {
     U.mustLimit(db, `me-login:${req.ip_}`, 30, 15 * 60e3);
     const login = String(req.body.login ?? '').trim().toLowerCase();
     let p = null;
-    if (/^\d{1,5}$/.test(login)) {
-      const c = core.getCard(db, Number(login));
+    if (U.parseCard(login) != null) {
+      const c = core.getCard(db, U.parseCard(login));
       p = c?.person_id ? core.getPerson(db, c.person_id) : null;
     } else p = db.prepare('SELECT * FROM people WHERE email = ?').get(login);
     const nope = 'Login or password don\'t match.';

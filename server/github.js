@@ -144,12 +144,24 @@ async function syncSitesRepo(db, s) {
   if (!tplSha) return { repo, changed: 0, note: 'No template/index.html in the sites repo yet, so no folders were made.' };
   const have = new Set([...st.files.keys()].map((p) => p.split('/')[0]));
   const missing = db.prepare("SELECT id FROM cards WHERE status = 'active' AND person_id IS NOT NULL ORDER BY id").all().map((r) => r.id).filter((id) => !have.has(String(id)));
-  if (!missing.length) return { repo, changed: 0, note: '' };
-  const tpl = (await readBlob(repo, tplSha)).toString('utf8');
   const want = {};
-  for (const id of missing) want[`${id}/index.html`] = Buffer.from(tpl.replaceAll('{{id}}', String(id)));
-  await commit(repo, st, want, `Cards: start folder${missing.length === 1 ? '' : 's'} ${missing.join(', ')}`);
-  return { repo, changed: missing.length, note: '' };
+  if (missing.length) {
+    const tpl = (await readBlob(repo, tplSha)).toString('utf8');
+    for (const id of missing) want[`${id}/index.html`] = Buffer.from(tpl.replaceAll('{{id}}', String(id)));
+  }
+  // The printed QR codes open sites/<n> (no slash). <n>.html answers that address: the logo, then it asks the
+  // dashboard where the card goes, so QR scans follow the same settings as taps. The project stays in <n>/.
+  const loaderSha = st.files.get('loader.html');
+  let loaders = 0;
+  if (loaderSha) {
+    for (const { id } of db.prepare('SELECT id FROM cards ORDER BY id').all()) {
+      if (st.files.get(`${id}.html`) !== loaderSha) { want[`${id}.html`] = 'loader'; loaders++; }
+    }
+    if (loaders) { const buf = await readBlob(repo, loaderSha); for (const k of Object.keys(want)) if (want[k] === 'loader') want[k] = buf; }
+  }
+  if (!Object.keys(want).length) return { repo, changed: 0, note: loaderSha ? '' : 'No loader.html in the sites repo, so QR codes open the project folder directly.' };
+  await commit(repo, st, want, [missing.length ? `start folder${missing.length === 1 ? '' : 's'} ${missing.join(', ')}` : '', loaders ? `${loaders} QR loader${loaders === 1 ? '' : 's'}` : ''].filter(Boolean).join(' + ').replace(/^/, 'Cards: '));
+  return { repo, changed: Object.keys(want).length, note: '' };
 }
 
 // ---------- sync both, debounced ----------

@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS cards (
   scans         INTEGER NOT NULL DEFAULT 0,
   last_scan_at  INTEGER,
   linked_at     INTEGER,
+  crew          TEXT,                               -- printed on the card (Club, Spade, Heart...); holders join that team
   created_at    INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS cards_person ON cards(person_id);

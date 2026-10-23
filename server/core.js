@@ -133,7 +133,27 @@ async function issueCard(db, personId, { cardId, pin: wanted, newPin = false, al
   else if (pin) await setPinHash(db, id, pin);
   db.prepare("UPDATE cards SET person_id = ?, status = 'active', linked_at = ? WHERE id = ?").run(person.id, now(), id);
   U.audit(db, actor, card ? 'gave card' : 'made and gave card', { card: id, person: person.id }, `${person.name}${pinGiven ? ', PIN as printed' : ''}`);
-  return { id, pin, made: !card, pin_from_card: pinGiven };
+  const crew = joinCrew(db, person.id, getCard(db, id).crew, actor);
+  return { id, pin, made: !card, pin_from_card: pinGiven, crew };
+}
+
+const CREW_COLORS = { club: '#3f9b6b', spade: '#3d4a8f', heart: '#e0435a', diamond: '#f08a24', sol: '#f2c14e', luna: '#7a8fd6', jester: '#9b59b6' };
+// The crew printed on a card is a team: the holder joins it unless an organiser already put them on one.
+function joinCrew(db, personId, crew, actor) {
+  if (!crew) return null;
+  const p = getPerson(db, personId);
+  let team = db.prepare('SELECT * FROM teams WHERE lower(name) = lower(?)').get(crew);
+  if (!team) {
+    const color = CREW_COLORS[crew.toLowerCase()] || null;
+    const id = Number(db.prepare('INSERT INTO teams (name, color, created_at) VALUES (?, ?, ?)').run(crew, color, now()).lastInsertRowid);
+    team = db.prepare('SELECT * FROM teams WHERE id = ?').get(id);
+    U.audit(db, actor, 'made crew team', { team: team.id }, crew);
+  }
+  if (!p.team_id) {
+    db.prepare('UPDATE people SET team_id = ? WHERE id = ?').run(team.id, p.id);
+    U.audit(db, actor, `joined ${team.name} (crew on their card)`, { person: p.id, team: team.id });
+  }
+  return team.name;
 }
 
 // Wrong card handed out, or a lost one replaced: move the person from one card number to another.
@@ -180,15 +200,18 @@ async function importCards(db, text, actor, { overwrite = false } = {}) {
   const out = { added: [], updated: [], skipped: [], errors: [] };
   const lines = String(text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 2000);
   for (const line of lines) {
-    const m = /^#?(\d{1,5})[\s,;\t]+(\d{4,8})$/.exec(line);
-    if (!m) { if (!/^card/i.test(line)) out.errors.push(line); continue; } // header rows are fine
+    // "7,1987" or "grn07,1987,Club" (the crew is optional)
+    const m = /^(?:grn|#)?0*(\d{1,5})[\s,;\t]+(\d{4,8})(?:[\s,;\t]+([A-Za-z][A-Za-z0-9 _-]{0,30}))?$/i.exec(line);
+    if (!m) { if (!/^(card|id)/i.test(line)) out.errors.push(line); continue; } // header rows are fine
     const id = Number(m[1]);
+    const crew = m[3] ? m[3].trim() : null;
     if (getCard(db, id)) {
-      if (!overwrite) { out.skipped.push(id); continue; }
+      if (!overwrite) { if (crew) db.prepare('UPDATE cards SET crew = ? WHERE id = ? AND crew IS NULL').run(crew, id); out.skipped.push(id); continue; }
       await setPinHash(db, id, m[2]);
+      if (crew) db.prepare('UPDATE cards SET crew = ? WHERE id = ?').run(crew, id);
       out.updated.push(id);
     } else {
-      db.prepare('INSERT INTO cards (id, pin_hash, created_at) VALUES (?, ?, ?)').run(id, await U.hashSecret(m[2]), now());
+      db.prepare('INSERT INTO cards (id, pin_hash, crew, created_at) VALUES (?, ?, ?, ?)').run(id, await U.hashSecret(m[2]), crew, now());
       out.added.push(id);
     }
   }
