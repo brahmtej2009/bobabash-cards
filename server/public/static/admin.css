@@ -385,3 +385,4 @@ nav .grp:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .pill.ok { background: var(--green-soft); color: var(--green); }
 .list .undone { opacity: .45; text-decoration: line-through; }
 @media (max-width: 860px) { .counter { grid-template-columns: 1fr; } .w-stock { width: 100%; } }
+.inline .grow { flex: 1; min-width: 200px; }

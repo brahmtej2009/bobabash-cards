@@ -8,11 +8,20 @@ const { now, getSettings, setSettings, resolve, projectUrl, parseJson, DEFAULT_S
 const { renderProfile, vcard, hasContact } = require('./profile');
 
 const API = 'https://api.github.com';
-const hasToken = () => !!process.env.GITHUB_TOKEN;
+// The token can be pasted in Setup (kept in the server-only secrets table) or set as GITHUB_TOKEN in /etc/cards.env.
+let DB = null;
+const use = (db) => { DB = db; };
+function token() {
+  try { const t = DB && DB.prepare("SELECT v FROM secrets WHERE k = 'github'").get()?.v; if (t) return t; } catch {}
+  return process.env.GITHUB_TOKEN || '';
+}
+const tokenSource = () => { try { if (DB && DB.prepare("SELECT 1 FROM secrets WHERE k = 'github'").get()) return 'dashboard'; } catch {} return process.env.GITHUB_TOKEN ? 'env' : 'none'; };
+const hasToken = () => !!token();
 
 async function gh(path, { method = 'GET', body } = {}) {
   const headers = { accept: 'application/vnd.github+json', 'user-agent': 'bobabash-cards', 'x-github-api-version': '2022-11-28' };
-  if (process.env.GITHUB_TOKEN) headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  const t = token();
+  if (t) headers.authorization = `Bearer ${t}`;
   if (body) headers['content-type'] = 'application/json';
   const res = await fetch(`${API}${path}`, { method, headers, body: body && JSON.stringify(body), signal: AbortSignal.timeout(20000) });
   if (res.status === 204) return null;
@@ -245,4 +254,10 @@ async function clearRepos(db) {
 const mergePr = (repo, n, title) => gh(`/repos/${repo}/pulls/${n}/merge`, { method: 'PUT', body: { merge_method: 'squash', commit_title: title } });
 const closePr = (repo, n) => gh(`/repos/${repo}/pulls/${n}`, { method: 'PATCH', body: { state: 'closed' } });
 
-module.exports = { buildMap, profileFiles, syncAll, schedule, syncPrs, mergePr, closePr, clearRepos, hasToken, EXT };
+// can this token write to a repo? (used when a token is pasted in Setup)
+async function canPush(repo) {
+  const r = await gh(`/repos/${repo}`);
+  return !!r?.permissions?.push;
+}
+
+module.exports = { use, tokenSource, canPush, buildMap, profileFiles, syncAll, schedule, syncPrs, mergePr, closePr, clearRepos, hasToken, EXT };
