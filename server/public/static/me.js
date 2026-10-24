@@ -538,17 +538,41 @@
   // Photos are shrunk on the phone (longest side 2000px, JPEG) before upload: faster on event wifi,
   // and re-encoding drops the location data phones put in photos.
   const PHOTO_STATE = { pending: 'waiting for approval', approved: 'in the gallery', rejected: 'not approved' };
+  // 64-bit "difference hash": the picture boiled down to 9x8 greys, one bit per left/right brighter step.
+  // Re-compressing or resizing a photo barely changes it, so the server can spot the same picture twice.
+  function dhash(src, w, h) {
+    const cv = el('canvas', { width: 144, height: 128 });
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(src, 0, 0, w, h, 0, 0, 144, 128);
+    const d = g.getImageData(0, 0, 144, 128).data;
+    const cell = new Float64Array(72); // 9 x 8 boxes of 16 x 16 pixels, averaged
+    for (let y = 0; y < 128; y++) for (let x = 0; x < 144; x++) {
+      const i = (y * 144 + x) * 4;
+      cell[(y >> 4) * 9 + (x >> 4)] += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    }
+    let hex = '';
+    for (let row = 0; row < 8; row++) {
+      let nib = 0;
+      for (let col = 0; col < 8; col++) {
+        nib = (nib << 1) | (cell[row * 9 + col] > cell[row * 9 + col + 1] ? 1 : 0);
+        if (col % 4 === 3) { hex += nib.toString(16); nib = 0; }
+      }
+    }
+    return hex;
+  }
   async function shrink(file) {
-    if (file.type === 'image/gif') return file;
     try {
       const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      const hash = dhash(bmp, bmp.width, bmp.height);
+      if (file.type === 'image/gif') { bmp.close?.(); return { blob: file, hash }; }
       const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
       const cv = el('canvas', { width: Math.round(bmp.width * k), height: Math.round(bmp.height * k) });
       cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
       bmp.close?.();
       const blob = await new Promise((r) => cv.toBlob(r, 'image/jpeg', 0.85));
-      return blob || file;
-    } catch { return file; } // e.g. HEIC on a browser that can't read it: send as is, the server decides
+      return { blob: blob || file, hash };
+    } catch { return { blob: file, hash: '' }; } // e.g. HEIC on a browser that can't read it: send as is, the server decides
   }
   async function loadPhotos() {
     try { renderPhotos(await api('/api/me/photos')); } catch {}
@@ -580,16 +604,17 @@
     errOf(f).textContent = '';
     if (!files.length) { errOf(f).textContent = 'Pick a photo first.'; return; }
     $('#photoBtn').disabled = true;
-    let done = 0, last = null;
-    for (const file of files) {
-      $('#photoProgress').textContent = `Uploading ${done + 1} of ${files.length}…`;
+    let done = 0, twins = 0, last = null;
+    for (const [n, file] of files.entries()) {
+      $('#photoProgress').textContent = `Uploading ${n + 1} of ${files.length}…`;
       try {
-        const blob = await shrink(file);
+        const { blob, hash } = await shrink(file);
         const res = await fetch('/api/me/photos', {
           method: 'POST', credentials: 'same-origin', body: blob,
-          headers: { 'content-type': blob.type || 'application/octet-stream', 'x-caption': encodeURIComponent(f.caption.value.trim()) },
+          headers: { 'content-type': blob.type || 'application/octet-stream', 'x-caption': encodeURIComponent(f.caption.value.trim()), 'x-dhash': hash },
         });
         const out = await res.json().catch(() => ({}));
+        if (res.status === 409) { twins++; continue; } // already in the gallery: skip it, keep going
         if (!res.ok) throw new Error(out.error || 'Upload failed.');
         last = out;
         done++;
@@ -598,6 +623,7 @@
     $('#photoBtn').disabled = false;
     $('#photoProgress').textContent = '';
     if (last) renderPhotos(last);
+    if (twins) errOf(f).textContent = `${twins} photo${twins === 1 ? ' was' : 's were'} skipped: already in the gallery.`;
     if (done) {
       toast(`${done} photo${done === 1 ? '' : 's'} sent. They show in the gallery once an organiser approves.`);
       f.reset();

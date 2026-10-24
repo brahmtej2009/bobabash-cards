@@ -10,6 +10,7 @@ const MIGRATIONS = {
   files: { person_id: 'INTEGER' },
   items: { emoji: 'TEXT' },
   cards: { crew: 'TEXT' },
+  photos: { sha: 'TEXT', dhash: 'TEXT' },
   handouts: { qty: 'INTEGER NOT NULL DEFAULT 1' },
 };
 

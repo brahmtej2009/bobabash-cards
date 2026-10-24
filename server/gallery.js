@@ -33,13 +33,18 @@ module.exports = function gallery(ctx) {
     if (buf.length > MAX) fail(413, 'Keep each photo under 8 MB.');
     const mime = sniff(buf);
     if (!IMAGE.includes(mime)) fail(415, 'Photos only: JPG, PNG, WebP or GIF.');
+    // the same picture twice (by anyone, in any state) is refused: exact bytes, or a near-identical fingerprint
+    const sha = require('node:crypto').createHash('sha256').update(buf).digest('hex');
+    const dh = /^[0-9a-f]{16}$/.test(String(req.get('x-dhash') || '')) ? req.get('x-dhash') : null;
+    const twin = db.prepare('SELECT person_id FROM photos WHERE sha = ? LIMIT 1').get(sha) || (dh && findTwin(dh));
+    if (twin) fail(409, twin.person_id === p.id ? 'You already uploaded this photo.' : 'This photo is already in the gallery. Someone else shared it first.');
     let caption = '';
     try { caption = decodeURIComponent(req.get('x-caption') || ''); } catch {}
     caption = U.cleanText(caption, 140) || null;
     const id = U.randomHex(12);
     fs.writeFileSync(path.join(DIR, id), buf);
-    db.prepare("INSERT INTO photos (id, person_id, mime, size, caption, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)")
-      .run(id, p.id, mime, buf.length, caption, now());
+    db.prepare("INSERT INTO photos (id, person_id, mime, size, caption, sha, dhash, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)")
+      .run(id, p.id, mime, buf.length, caption, sha, dh, now());
     U.audit(db, `owner:${p.id}`, 'uploaded a photo', { person: p.id }, caption);
     return { ok: true, photos: mine(p) };
   }));
@@ -52,6 +57,18 @@ module.exports = function gallery(ctx) {
     U.audit(db, `owner:${p.id}`, 'deleted their photo', { person: p.id });
     return { ok: true, photos: mine(p) };
   }));
+
+  // fingerprints within a few bits of each other are the same picture (re-saved, re-compressed, resized)
+  const SAME = 6;
+  function findTwin(dh) {
+    const a = BigInt(`0x${dh}`);
+    for (const r of db.prepare('SELECT person_id, dhash FROM photos WHERE dhash IS NOT NULL').all()) {
+      let x = a ^ BigInt(`0x${r.dhash}`), bits = 0;
+      while (x) { bits += Number(x & 1n); x >>= 1n; }
+      if (bits <= SAME) return r;
+    }
+    return null;
+  }
 
   function remove(id) {
     db.prepare('DELETE FROM photos WHERE id = ?').run(id);
