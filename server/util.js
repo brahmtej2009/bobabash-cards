@@ -98,7 +98,7 @@ const DEFAULT_SETTINGS = {
   lock_on: '0',
   unlock_at: '',
   // host 1: the link on the chip, a GitHub Pages repo of redirect pages
-  card_base: 'https://bobabash.github.io',
+  card_base: 'https://bobabash.github.io/sites', // what's flashed on the chips and printed in the QR codes
   redirect_repo: 'bobabash/bobabash.github.io',
   // host 2: everyone's projects, one folder per card
   // one GitHub Pages repo can hold both: redirect pages at the root, projects under sites_dir/
