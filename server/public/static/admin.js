@@ -127,7 +127,7 @@
   let view = 'desk';
   const PAGES = {
     desk: () => renderDesk(), people: () => renderPeople(), teams: () => loadTeams(), notify: () => loadNotices(),
-    schedule: () => loadSchedule(), help: () => loadHelp(), handouts: () => renderHandouts(), cards: () => renderCards(),
+    schedule: () => loadSchedule(), help: () => loadHelp(), handouts: () => renderHandouts(), gallery: () => loadGallery(), cards: () => renderCards(),
     control: () => renderControl(), print: () => {}, prs: () => loadPrs(), guide: () => loadGuide(), stats: () => loadStats(),
     log: () => loadLog(true), admins: () => renderAdmins(), setup: () => renderSetup(),
   };
@@ -170,6 +170,7 @@
     );
     $('#helpBadge').hidden = !S.counts.help_open;
     $('#helpBadge').textContent = S.counts.help_open;
+    setPhotoBadge(S.counts.photos_pending);
     const banner = $('#overrideBanner');
     banner.hidden = !S.override_active;
     if (S.override_active) banner.replaceChildren('Every card is going to ', el('a', { href: s.override_url, target: '_blank', rel: 'noopener', text: short(s.override_url) }), s.override_until ? ` until ${fmt(s.override_until)}` : '', '. Change it under Control.');
@@ -1245,6 +1246,58 @@
     f.reset();
     await refresh();
     renderHandouts();
+  }));
+
+  // ================= gallery =================
+  let galStatus = 'pending', galData = null;
+  async function loadGallery() {
+    galData = await api(`/api/admin/photos?status=${galStatus}`);
+    renderGallery();
+  }
+  function renderGallery() {
+    const { photos, counts, open } = galData;
+    for (const s of ['pending', 'approved', 'rejected']) $(`#galN_${s}`).textContent = counts[s] || '';
+    $$('#galFilter button').forEach((b) => b.classList.toggle('on', b.dataset.s === galStatus));
+    $('#galApproveAll').hidden = galStatus !== 'pending' || !photos.length;
+    $('#galOpen').checked = open;
+    setPhotoBadge(counts.pending);
+    const act = (p, status, label, cls) => el('button', { class: `btn sm ${cls || ''}`, type: 'button', text: label, onclick: run(async () => {
+      const r = await api(`/api/admin/photos/${p.id}`, 'POST', { status });
+      setPhotoBadge(r.pending);
+      await loadGallery();
+    }) });
+    $('#galGrid').replaceChildren(...(photos.length ? photos.map((p) => el('div', { class: 'photo' },
+      el('a', { href: p.url, target: '_blank', rel: 'noopener', class: 'photo-img' }, el('img', { src: p.url, alt: p.caption || `Photo by ${p.name}`, loading: 'lazy' })),
+      el('div', { class: 'photo-meta' },
+        el('div', { class: 'row-main' }, pchip(p.person_id, p.name), el('span', { class: 'muted small', text: ago(p.created_at) })),
+        p.caption ? el('p', { class: 'small', text: p.caption }) : null,
+        el('div', { class: 'inline wrap' },
+          galStatus !== 'approved' ? act(p, 'approved', 'Approve', 'accent') : null,
+          galStatus !== 'rejected' ? act(p, 'rejected', 'Reject') : null,
+          galStatus !== 'pending' ? act(p, 'pending', 'Back to waiting', 'ghost') : null,
+          el('button', { class: 'btn sm danger', type: 'button', text: 'Delete', onclick: run(async () => {
+            if (!confirm('Delete this photo for good?')) return;
+            const r = await api(`/api/admin/photos/${p.id}/delete`, 'POST', {});
+            setPhotoBadge(r.pending);
+            await loadGallery();
+          }) })))))
+      : [el('p', { class: 'muted', text: galStatus === 'pending' ? 'Nothing waiting. New uploads show up here.' : 'None yet.' })]));
+  }
+  function setPhotoBadge(n) {
+    $('#photoBadge').hidden = !n;
+    $('#photoBadge').textContent = n || '';
+  }
+  $$('#galFilter button').forEach((b) => b.addEventListener('click', run(async () => { galStatus = b.dataset.s; await loadGallery(); })));
+  $('#galApproveAll').addEventListener('click', run(async () => {
+    const waiting = galData.photos.filter((p) => p.status === 'pending');
+    if (!confirm(`Approve all ${waiting.length} waiting photos? Check them first: they go public straight away.`)) return;
+    for (const p of waiting) await api(`/api/admin/photos/${p.id}`, 'POST', { status: 'approved' });
+    toast(`Approved ${waiting.length}`);
+    await loadGallery();
+  }));
+  $('#galOpen').addEventListener('change', run(async (e) => {
+    await api('/api/admin/gallery', 'POST', { open: e.target.checked });
+    toast(e.target.checked ? 'Photo uploads open' : 'Photo uploads closed');
   }));
 
   // ================= control =================

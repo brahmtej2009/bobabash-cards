@@ -244,3 +244,17 @@ CREATE TABLE IF NOT EXISTS secrets (
   k TEXT PRIMARY KEY,
   v TEXT NOT NULL
 );
+
+-- event gallery: people upload, organisers approve, approved ones are public at /gallery
+CREATE TABLE IF NOT EXISTS photos (
+  id          TEXT PRIMARY KEY,                       -- also the file name in DATA_DIR/photos
+  person_id   INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  mime        TEXT NOT NULL,
+  size        INTEGER NOT NULL,
+  caption     TEXT,
+  status      TEXT NOT NULL DEFAULT 'pending',        -- pending | approved | rejected
+  reviewed_by TEXT,
+  reviewed_at INTEGER,
+  created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS photos_status ON photos(status, created_at);

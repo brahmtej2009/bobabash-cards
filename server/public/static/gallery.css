@@ -1,0 +1,54 @@
+/* Public event gallery: same casual Boba Bash look as /me */
+:root {
+  --cream: #fbf6e8; --paper: #fffdf6; --ink: #3d2b18; --muted: #7a6650; --line: #3d2b18;
+  --yellow: #f2c14e; --pink: #f7a8b8; --mint: #a8e0c4;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { min-height: 100vh; background: var(--cream); color: var(--ink); font: 15px/1.5 Poppins, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+
+.top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; max-width: 1200px; margin: 0 auto; padding: 20px 16px 8px; }
+.logo img { display: block; width: 96px; height: auto; }
+.titles { flex: 1; min-width: 180px; }
+h1 { margin: 0; font: 800 34px/1.1 "Baloo 2", system-ui, sans-serif; }
+.titles p { margin: 2px 0 0; color: var(--muted); }
+.add { display: inline-flex; align-items: center; height: 42px; padding: 0 18px; border: 2px solid var(--line); border-radius: 999px; background: var(--yellow); box-shadow: 3px 3px 0 var(--line); font: 700 15px "Baloo 2", sans-serif; text-decoration: none; white-space: nowrap; }
+.add:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--line); }
+
+main { max-width: 1200px; margin: 0 auto; padding: 12px 16px 48px; }
+.empty { margin: 40px auto; max-width: 420px; padding: 24px; text-align: center; border: 2px dashed var(--line); border-radius: 18px; background: var(--paper); }
+
+/* masonry by columns: photos keep their own shape */
+.grid { columns: 4 240px; column-gap: 14px; }
+.ph { break-inside: avoid; display: block; width: 100%; margin: 0 0 14px; padding: 0; border: 2px solid var(--line); border-radius: 16px; background: var(--paper); box-shadow: 3px 3px 0 var(--line); overflow: hidden; cursor: zoom-in; text-align: left; font: inherit; color: inherit; transition: transform .12s, box-shadow .12s; }
+.ph:hover { transform: translate(-1px, -2px) rotate(-.4deg); box-shadow: 5px 5px 0 var(--line); }
+.ph:focus-visible { outline: 3px solid var(--pink); outline-offset: 2px; }
+.ph img { display: block; width: 100%; height: auto; background: #efe6cf; }
+.ph .cap { display: block; padding: 8px 12px 10px; font-size: 13px; }
+.ph .cap b { display: block; font-weight: 600; }
+.ph .cap span { color: var(--muted); font-size: 12px; }
+.ph.fresh { animation: drop .5s cubic-bezier(.3, 1.4, .5, 1); }
+@keyframes drop { from { opacity: 0; transform: translateY(-12px) scale(.96); } }
+
+/* lightbox */
+.lb { position: fixed; inset: 0; z-index: 10; display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; background: rgba(30, 20, 10, .92); }
+.lb figure { margin: 0; display: grid; justify-items: center; gap: 10px; padding: 16px 0; max-height: 100vh; }
+.lb img { max-width: 100%; max-height: calc(100vh - 110px); border-radius: 12px; object-fit: contain; }
+.lb figcaption { color: #fbf6e8; text-align: center; font-size: 14px; }
+.lb figcaption b { display: block; font-weight: 600; }
+.lb figcaption span { opacity: .75; font-size: 13px; }
+.lb button { border: 0; background: none; color: #fbf6e8; cursor: pointer; font: 700 44px/1 "Baloo 2", sans-serif; }
+.lb button:hover { color: var(--yellow); }
+.lb-x { position: absolute; top: 10px; right: 14px; font-size: 28px !important; }
+[hidden] { display: none !important; }
+
+@media (max-width: 600px) {
+  .grid { columns: 2 150px; column-gap: 10px; }
+  .ph { margin-bottom: 10px; border-radius: 12px; box-shadow: 2px 2px 0 var(--line); }
+  h1 { font-size: 28px; }
+  .logo img { width: 72px; }
+  .lb { grid-template-columns: 40px 1fr 40px; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

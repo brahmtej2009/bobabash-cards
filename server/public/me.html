@@ -102,6 +102,7 @@
         <button data-page="team">Team</button>
         <button data-page="schedule">Schedule</button>
         <button data-page="help">Get help</button>
+        <button data-page="gallery">Gallery <b class="badge soft" id="navPhotos" hidden></b></button>
         <button data-page="guide">Guide</button>
         <button data-page="account">Account</button>
       </nav>
@@ -222,6 +223,27 @@
           <p class="sub" id="helpClosed" hidden>The help desk is closed right now. Find an organiser.</p>
         </form>
         <div id="helpList"></div>
+      </section>
+
+      <!-- gallery -->
+      <section data-pane="gallery" hidden>
+        <h1 class="page-h">Gallery</h1>
+        <form class="panel" id="photoForm">
+          <h3>Share your photos</h3>
+          <p class="sub">Pick one or more photos. An organiser checks each one, then it shows up on the <a href="/gallery" target="_blank" rel="noopener">public event gallery</a>.</p>
+          <label class="drop" id="photoDrop">
+            <input type="file" name="files" accept="image/*" multiple id="photoFiles">
+            <span id="photoPick">Tap to choose photos</span>
+          </label>
+          <label class="f"><span>Caption <small>(optional, goes with every photo you pick now)</small></span><input name="caption" maxlength="140" placeholder="Our team at 3am, still debugging"></label>
+          <p class="err" role="alert"></p>
+          <div class="inline wrap"><button class="btn" type="submit" id="photoBtn">Upload</button><span class="sub" id="photoProgress"></span></div>
+          <p class="sub" id="photoClosed" hidden>Photo uploads are closed right now.</p>
+        </form>
+        <div class="panel">
+          <div class="np-head"><h3>Your photos</h3><a class="sub" href="/gallery" target="_blank" rel="noopener">Open the gallery ↗</a></div>
+          <div class="myphotos" id="myPhotos"></div>
+        </div>
       </section>
 
       <!-- guide -->
