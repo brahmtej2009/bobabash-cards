@@ -1261,6 +1261,9 @@
     $('#galApproveAll').hidden = galStatus !== 'pending' || !photos.length;
     $('#galOpen').checked = open;
     setPhotoBadge(counts.pending);
+    const top = galData.top || [];
+    $('#galTopBox').hidden = !top.length;
+    $('#galTop').replaceChildren(...top.map((t, i) => el('li', {}, el('span', { class: 'medal', text: ['🥇', '🥈', '🥉', '4', '5'][i] }), pchip(t.person_id, t.name), el('b', { text: `${t.n} photo${t.n === 1 ? '' : 's'}` }))));
     const act = (p, status, label, cls) => el('button', { class: `btn sm ${cls || ''}`, type: 'button', text: label, onclick: run(async () => {
       const r = await api(`/api/admin/photos/${p.id}`, 'POST', { status });
       setPhotoBadge(r.pending);

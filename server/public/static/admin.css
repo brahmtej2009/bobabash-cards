@@ -394,3 +394,9 @@ nav .grp:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .photo-meta { display: grid; gap: 6px; align-content: start; padding: 10px; }
 .photo-meta p { margin: 0; overflow-wrap: anywhere; }
 .seg button b { margin-left: 4px; font-weight: 700; }
+
+/* gallery leaderboard */
+.podium { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.podium li { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); }
+.podium li b { margin-left: auto; }
+.podium .medal { width: 22px; text-align: center; font-weight: 700; color: var(--muted); }
