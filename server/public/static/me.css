@@ -238,7 +238,8 @@ code { padding: 1px 6px; border-radius: 6px; background: #f1e8d4; font-size: 12.
   .np-list { max-height: none; }
 }
 @media (max-width: 760px) {
-  .shell { grid-template-columns: 1fr; }
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .side, .main { min-width: 0; }
   .side { position: sticky; top: 0; z-index: 20; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-right: 0; border-bottom: 2px dashed var(--line); background: var(--cream); }
   .brand { margin: 0; }
   .brand img { width: 64px; height: auto; }
@@ -257,3 +258,19 @@ code { padding: 1px 6px; border-radius: 6px; background: #f1e8d4; font-size: 12.
   .toasts { left: 12px; right: 12px; justify-items: stretch; }
   .toast { max-width: none; }
 }
+
+/* gallery */
+.drop { position: relative; display: grid; place-items: center; min-height: 96px; margin: 10px 0 12px; border: 2px dashed var(--ink); border-radius: 16px; background: #fff8e6; cursor: pointer; text-align: center; font-weight: 600; padding: 12px; }
+.drop:hover { background: #fff1c9; }
+.drop input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.myphotos { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-top: 10px; }
+.myphoto { border: 2px solid var(--ink); border-radius: 14px; overflow: hidden; background: #fffdf6; }
+.myphoto img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: #efe6cf; }
+.myphoto.rejected img { opacity: .45; filter: grayscale(1); }
+.mp-meta { display: grid; gap: 2px; padding: 8px 10px; font-size: 12px; }
+.mp-cap { color: #7a6650; overflow-wrap: anywhere; }
+.mp-meta .link { justify-self: start; font-size: 12px; }
+.state.pending { background: #fdf3dc; color: #8a5a0b; }
+.state.approved { background: #e3f6ec; color: #17733f; }
+.state.rejected { background: #fde8eb; color: #a3202f; }
+.badge.soft { background: var(--pink, #f7a8b8); color: var(--ink); }

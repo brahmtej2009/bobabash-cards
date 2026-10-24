@@ -142,6 +142,7 @@ module.exports = function admin(ctx) {
         cards: db.prepare('SELECT COUNT(*) n FROM cards').get().n,
         free_cards: db.prepare('SELECT COUNT(*) n FROM cards WHERE person_id IS NULL').get().n,
         help_open: db.prepare("SELECT COUNT(*) n FROM help WHERE status != 'done'").get().n,
+        photos_pending: db.prepare("SELECT COUNT(*) n FROM photos WHERE status = 'pending'").get().n,
         taps_24h: db.prepare('SELECT COUNT(*) n FROM scans WHERE ts > ?').get(now() - 86400e3).n,
       },
       github: { token: gh.hasToken(), source: gh.tokenSource(), last_sync: Number(s.last_publish || 0), problem: s.last_publish_error },

@@ -28,7 +28,7 @@ const ADMIN_TTL = 14 * 24 * 3600e3;
 const OTP_TTL = 10 * 60e3;
 const COOKIE = { owner: '__Host-bbc_o', admin: '__Host-bbc_a' };
 const MAX_UPLOAD = 10 * 1024 * 1024;
-const UPLOAD_ROUTES = ['/api/admin/files', '/api/me/avatar'];
+const UPLOAD_ROUTES = ['/api/admin/files', '/api/me/avatar', '/api/me/photos'];
 
 const app = express();
 app.disable('x-powered-by');
@@ -216,7 +216,7 @@ function noticeVisible(n, p) {
 
 const ctx = {
   app, db, U, core, gh, mail, DATA_DIR, UPLOADS, DEV, MAX_UPLOAD,
-  wrap, startSession, endSession, needAdmin, needDesk, needOwner, sendOtp, checkOtp, saveUpload, deleteFile,
+  wrap, startSession, endSession, needAdmin, needDesk, needOwner, session, sniff, sendOtp, checkOtp, saveUpload, deleteFile,
   dayKey, todayStart, device, lastDays, tapStats, noticeVisible,
   sync: () => gh.schedule(db, DATA_DIR),
   // live updates to people's open dashboards: 'notice' (a message went out), 'person' (something about them changed)
@@ -364,6 +364,7 @@ app.use('/api', (req, res, next) => {
 
 require('./owner')(ctx);
 require('./admin')(ctx);
+require('./gallery')(ctx);
 
 // ---------- pages ----------
 const pub = path.join(__dirname, 'public');
@@ -390,6 +391,7 @@ app.get('/', sendPage('home.html'));
 app.get(['/me', '/me/'], sendPage('me.html'));
 app.get(['/admin', '/admin/'], sendPage('admin.html'));
 app.get(['/wall', '/wall/'], sendPage('wall.html'));
+app.get(['/gallery', '/gallery/'], sendPage('gallery.html'));
 app.get('/api/version', (req, res) => res.set('cache-control', 'no-store').json({ build: BUILD }));
 app.get('/favicon.ico', (req, res) => res.sendFile(path.join(pub, 'static', 'icon.png')));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));

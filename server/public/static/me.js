@@ -247,7 +247,7 @@
       es.addEventListener('open', () => $('#liveDot').classList.add('on'));
       es.addEventListener('error', () => $('#liveDot').classList.remove('on'));
       es.addEventListener('notice', (e) => { try { gotNotice(JSON.parse(e.data)); } catch {} });
-      es.addEventListener('refresh', () => load(true));
+      es.addEventListener('refresh', () => { load(true); if (current === 'gallery') loadPhotos(); });
     }
     // safety net: catches anything the stream missed (and messages sent from the terminal)
     pollT = setInterval(() => { if (document.visibilityState === 'visible') load(true); }, 45000);
@@ -283,6 +283,7 @@
     $$('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== name));
     store.set('me-tab', name);
     if (name === 'card' && C?.cards.length) loadStats();
+    if (name === 'gallery') loadPhotos();
     if (name === 'home') scheduleRead();
     window.scrollTo(0, 0);
   }
@@ -531,6 +532,77 @@
       f.message.value = '';
       toast('Sent. An organiser will come to you.');
     });
+  });
+
+  // ---------- gallery ----------
+  // Photos are shrunk on the phone (longest side 2000px, JPEG) before upload: faster on event wifi,
+  // and re-encoding drops the location data phones put in photos.
+  const PHOTO_STATE = { pending: 'waiting for approval', approved: 'in the gallery', rejected: 'not approved' };
+  async function shrink(file) {
+    if (file.type === 'image/gif') return file;
+    try {
+      const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+      const cv = el('canvas', { width: Math.round(bmp.width * k), height: Math.round(bmp.height * k) });
+      cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+      bmp.close?.();
+      const blob = await new Promise((r) => cv.toBlob(r, 'image/jpeg', 0.85));
+      return blob || file;
+    } catch { return file; } // e.g. HEIC on a browser that can't read it: send as is, the server decides
+  }
+  async function loadPhotos() {
+    try { renderPhotos(await api('/api/me/photos')); } catch {}
+  }
+  function renderPhotos(r) {
+    $('#photoClosed').hidden = r.open;
+    $$('#photoForm input, #photoForm button').forEach((x) => (x.disabled = !r.open));
+    const waiting = r.photos.filter((p) => p.status === 'pending').length;
+    $('#navPhotos').hidden = !waiting;
+    $('#navPhotos').textContent = waiting;
+    fill($('#myPhotos'), r.photos.length ? r.photos.map((p) => el('div', { class: `myphoto ${p.status}` },
+      el('img', { src: p.url, alt: p.caption || 'Your photo', loading: 'lazy' }),
+      el('div', { class: 'mp-meta' },
+        el('span', { class: `state ${p.status}`, text: PHOTO_STATE[p.status] || p.status }),
+        p.caption ? el('span', { class: 'mp-cap', text: p.caption }) : null,
+        el('button', { class: 'link', type: 'button', text: 'Delete', onclick: async () => {
+          if (!confirm('Delete this photo?')) return;
+          try { renderPhotos(await api(`/api/me/photos/${p.id}/delete`, {})); toast('Deleted.'); } catch (x) { toast(x.message, true); }
+        } })))) : el('p', { class: 'empty-note', text: 'No photos yet. Your first one goes here.' }));
+  }
+  $('#photoFiles').addEventListener('change', (e) => {
+    const n = e.target.files.length;
+    $('#photoPick').textContent = n ? `${n} photo${n === 1 ? '' : 's'} picked. Tap Upload.` : 'Tap to choose photos';
+  });
+  $('#photoForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.currentTarget;
+    const files = [...f.files.files];
+    errOf(f).textContent = '';
+    if (!files.length) { errOf(f).textContent = 'Pick a photo first.'; return; }
+    $('#photoBtn').disabled = true;
+    let done = 0, last = null;
+    for (const file of files) {
+      $('#photoProgress').textContent = `Uploading ${done + 1} of ${files.length}…`;
+      try {
+        const blob = await shrink(file);
+        const res = await fetch('/api/me/photos', {
+          method: 'POST', credentials: 'same-origin', body: blob,
+          headers: { 'content-type': blob.type || 'application/octet-stream', 'x-caption': encodeURIComponent(f.caption.value.trim()) },
+        });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(out.error || 'Upload failed.');
+        last = out;
+        done++;
+      } catch (x) { errOf(f).textContent = `${file.name}: ${x.message}`; break; }
+    }
+    $('#photoBtn').disabled = false;
+    $('#photoProgress').textContent = '';
+    if (last) renderPhotos(last);
+    if (done) {
+      toast(`${done} photo${done === 1 ? '' : 's'} sent. They show in the gallery once an organiser approves.`);
+      f.reset();
+      $('#photoPick').textContent = 'Tap to choose photos';
+    }
   });
 
   // ---------- account ----------

@@ -7,7 +7,7 @@ const U = require('./util');
 const PHRASE = 'RESET BOBA BASH';
 
 // Order matters: children before parents.
-const TABLES = ['notice_reads', 'notices', 'team_notes', 'handout_log', 'handouts', 'items', 'points_log', 'help', 'schedule', 'scans', 'prs', 'cards', 'people', 'teams', 'files', 'otps', 'limits', 'log'];
+const TABLES = ['photos', 'notice_reads', 'notices', 'team_notes', 'handout_log', 'handouts', 'items', 'points_log', 'help', 'schedule', 'scans', 'prs', 'cards', 'people', 'teams', 'files', 'otps', 'limits', 'log'];
 
 function counts(db) {
   const n = (sql) => db.prepare(sql).get().n;
@@ -21,6 +21,7 @@ function counts(db) {
     handout_items: n('SELECT COUNT(*) n FROM items'),
     taps: n('SELECT COUNT(*) n FROM scans'),
     uploads: n('SELECT COUNT(*) n FROM files'),
+    photos: n('SELECT COUNT(*) n FROM photos'),
     log_entries: n('SELECT COUNT(*) n FROM log'),
   };
 }
@@ -55,8 +56,7 @@ function wipe(db, dataDir, { keepSettings = true, actor }) {
   }
   db.exec("DELETE FROM settings WHERE key = 'boba_seeded'");
   require('./db').seedBoba(db);
-  const uploads = path.join(dataDir, 'uploads');
-  for (const f of fs.existsSync(uploads) ? fs.readdirSync(uploads) : []) fs.rmSync(path.join(uploads, f), { force: true });
+  for (const dir of ['uploads', 'photos'].map((d) => path.join(dataDir, d))) for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) fs.rmSync(path.join(dir, f), { force: true });
   U.audit(db, actor, 'reset everything to fresh', {}, { removed: before, backup: path.basename(file), kept_settings: keepSettings });
   return { removed: before, backup: file };
 }

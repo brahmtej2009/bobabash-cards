@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Gallery · Boba Bash Greater Noida</title>
+  <meta name="description" content="Photos from Boba Bash Greater Noida, shared by the people who were there.">
+  <meta name="theme-color" content="#fbf6e8">
+  <link rel="icon" href="/static/icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/gallery.css">
+</head>
+<body>
+  <header class="top">
+    <a class="logo" href="/"><img src="/static/boba-bash.webp" alt="Hack Club's Boba Bash" width="120" height="83"></a>
+    <div class="titles">
+      <h1>Gallery</h1>
+      <p id="sub">Photos from the people who were there.</p>
+    </div>
+    <a class="add" href="/me">+ Add your photos</a>
+  </header>
+
+  <main>
+    <p class="empty" id="empty" hidden>No photos yet. Log in at <a href="/me">your dashboard</a> and add the first one!</p>
+    <div class="grid" id="grid"></div>
+  </main>
+
+  <div class="lb" id="lb" hidden>
+    <button class="lb-x" id="lbClose" type="button" aria-label="Close">✕</button>
+    <button class="lb-nav prev" id="lbPrev" type="button" aria-label="Previous">‹</button>
+    <figure>
+      <img id="lbImg" alt="">
+      <figcaption><b id="lbCap"></b><span id="lbBy"></span></figcaption>
+    </figure>
+    <button class="lb-nav next" id="lbNext" type="button" aria-label="Next">›</button>
+  </div>
+
+  <script src="/static/gallery.js"></script>
+</body>
+</html>

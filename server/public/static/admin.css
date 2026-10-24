@@ -386,3 +386,11 @@ nav .grp:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .list .undone { opacity: .45; text-decoration: line-through; }
 @media (max-width: 860px) { .counter { grid-template-columns: 1fr; } .w-stock { width: 100%; } }
 .inline .grow { flex: 1; min-width: 200px; }
+
+/* gallery moderation */
+.photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.photo { display: grid; grid-template-rows: auto 1fr; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; box-shadow: var(--shadow); }
+.photo-img img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #eef0f3; }
+.photo-meta { display: grid; gap: 6px; align-content: start; padding: 10px; }
+.photo-meta p { margin: 0; overflow-wrap: anywhere; }
+.seg button b { margin-left: 4px; font-weight: 700; }
