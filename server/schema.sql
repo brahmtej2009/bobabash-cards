@@ -252,9 +252,12 @@ CREATE TABLE IF NOT EXISTS photos (
   mime        TEXT NOT NULL,
   size        INTEGER NOT NULL,
   caption     TEXT,
+  sha         TEXT,                                   -- sha256 of the file: exact re-uploads
+  dhash       TEXT,                                   -- 64-bit visual fingerprint (hex): the same picture re-compressed
   status      TEXT NOT NULL DEFAULT 'pending',        -- pending | approved | rejected
   reviewed_by TEXT,
   reviewed_at INTEGER,
   created_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS photos_status ON photos(status, created_at);
+CREATE INDEX IF NOT EXISTS photos_sha ON photos(sha);
