@@ -13,33 +13,48 @@
     for (const k of kids) if (k != null) n.append(k);
     return n;
   }
+  // `photos` is what's on screen, in order: the lightbox and the slideshow both walk it
   let photos = [];
-  const shown = new Set();
+  let data = { albums: [], photos: [] };
+  let album = 'all';
+  let drawn = '';
+  const byLine = (p) => (p.by ? `by ${p.by}` : '');
 
-  function tile(p, i, fresh) {
-    return el('button', { class: `ph${fresh ? ' fresh' : ''}`, type: 'button', 'data-id': p.id, 'aria-label': p.caption || `Photo by ${p.by}`, onclick: () => openLb(photos.findIndex((x) => x.id === p.id)) },
-      el('img', { src: p.url, alt: p.caption || `Photo by ${p.by}`, loading: i > 8 ? 'lazy' : 'eager' }),
-      el('span', { class: 'cap' }, p.caption ? el('b', { text: p.caption }) : null, el('span', { text: `by ${p.by}` })));
+  function tile(p, i) {
+    return el('button', { class: 'ph', type: 'button', 'data-id': p.id, 'aria-label': p.caption || byLine(p) || 'Open photo', onclick: () => openLb(photos.findIndex((x) => x.id === p.id)) },
+      el('img', { src: p.thumb || p.url, alt: p.caption || byLine(p), loading: i > 8 ? 'lazy' : 'eager', width: p.w || null, height: p.h || null }),
+      p.caption || p.by ? el('span', { class: 'cap' }, p.caption ? el('b', { text: p.caption }) : null, p.by ? el('span', { text: byLine(p) }) : null) : null);
+  }
+
+  function render() {
+    const albums = data.albums.filter((a) => data.photos.some((p) => p.album === a.id));
+    if (album !== 'all' && !albums.some((a) => a.id === album)) album = 'all';
+    const shown = album === 'all' ? albums : albums.filter((a) => a.id === album);
+    const sig = `${album}|${data.photos.map((p) => p.id).join(',')}`;
+    if (sig === drawn) return; // nothing changed: leave the page (and the scroll) alone
+    drawn = sig;
+    const count = (id) => data.photos.filter((p) => p.album === id).length;
+    $('#albums').replaceChildren(...(albums.length > 1 ? [
+      el('button', { class: 'chip', type: 'button', 'aria-pressed': String(album === 'all'), onclick: () => { album = 'all'; render(); } }, 'All', el('span', { class: 'n', text: data.photos.length })),
+      ...albums.map((a) => el('button', { class: 'chip', type: 'button', 'aria-pressed': String(album === a.id), onclick: () => { album = a.id; render(); } }, a.name, el('span', { class: 'n', text: count(a.id) }))),
+    ] : []));
+    photos = [];
+    $('#wall').replaceChildren(...shown.map((a) => {
+      const items = data.photos.filter((p) => p.album === a.id).sort((x, y) => (y.ts || 0) - (x.ts || 0));
+      const start = photos.length;
+      photos.push(...items);
+      return el('section', { class: 'album' },
+        el('div', { class: 'album-h' }, el('h2', { text: a.name }), a.link ? el('a', { href: a.link, target: '_blank', rel: 'noopener', text: [a.event !== a.name ? a.event : '', a.date].filter(Boolean).join(' · ') }) : el('span', { text: a.date || '' })),
+        el('div', { class: 'grid' }, ...items.map((p, k) => tile(p, start + k))));
+    }));
+    $('#empty').hidden = data.photos.length > 0;
   }
 
   async function load() {
-    let data;
     try { data = await (await fetch('/api/gallery', { cache: 'no-store' })).json(); } catch { return; }
-    const first = !shown.size;
-    photos = data.photos || [];
-    $('#sub').textContent = photos.length ? `${photos.length} photo${photos.length === 1 ? '' : 's'} from ${data.event_name}` : `Photos from ${data.event_name}`;
-    $('#empty').hidden = photos.length > 0;
-    const grid = $('#grid');
-    if (first) {
-      grid.replaceChildren(...photos.map((p, i) => tile(p, i, false)));
-      photos.forEach((p) => shown.add(p.id));
-      return;
-    }
-    // keep what's on screen; new ones go on top, removed ones disappear
-    const ids = new Set(photos.map((p) => p.id));
-    for (const node of [...grid.children]) if (!ids.has(node.dataset.id)) node.remove();
-    const fresh = photos.filter((p) => !shown.has(p.id));
-    for (const p of fresh.reverse()) { grid.prepend(tile(p, 0, true)); shown.add(p.id); }
+    data.albums = data.albums || [];
+    $('#sub').textContent = data.photos.length ? `${data.photos.length} photo${data.photos.length === 1 ? '' : 's'} from Boba Bash Greater Noida and its events` : 'Photos from the people who were there.';
+    render();
   }
 
   // lightbox
@@ -49,9 +64,9 @@
     at = i;
     const p = photos[at];
     $('#lbImg').src = p.url;
-    $('#lbImg').alt = p.caption || `Photo by ${p.by}`;
+    $('#lbImg').alt = p.caption || byLine(p);
     $('#lbCap').textContent = p.caption || '';
-    $('#lbBy').textContent = `by ${p.by}`;
+    $('#lbBy').textContent = byLine(p);
     $('#lb').hidden = false;
   }
   const close = () => { $('#lb').hidden = true; };
@@ -94,11 +109,11 @@
     };
     next.onload = swap;
     next.onerror = swap;
-    next.alt = p.caption || `Photo by ${p.by}`;
+    next.alt = p.caption || byLine(p);
     next.src = p.url;
     if (next.complete && next.naturalWidth) swap();
     $('#ssCapT').textContent = p.caption || '';
-    $('#ssCapBy').textContent = `by ${p.by}`;
+    $('#ssCapBy').textContent = byLine(p);
     $('#ssCount').textContent = `${ssAt + 1} / ${photos.length}`;
     // warm up the next one so the fade never waits on the network
     const pre = photos[(ssAt + 1) % photos.length];

@@ -118,13 +118,51 @@ module.exports = function gallery(ctx) {
   }));
 
   // ---------- everyone ----------
+  // ---------- the events site's albums (events.boba-bash.xyz) ----------
+  // Same container, so it's asked directly. Only its own photos are taken: ours come back to it under
+  // "cards-" ids and are skipped here, so nothing echoes. Videos stay over there.
+  const EVENTS_INTERNAL = process.env.EVENTS_INTERNAL || 'http://127.0.0.1:3101';
+  const EVENTS_URL = (process.env.EVENTS_URL || 'https://events.boba-bash.xyz').replace(/\/$/, '');
+  let eventsPart = { albums: [], photos: [] };
+  async function pullEvents() {
+    try {
+      const r = await fetch(`${EVENTS_INTERNAL}/api/public`, { signal: AbortSignal.timeout(8000) });
+      if (!r.ok) return;
+      const d = await r.json();
+      const evs = new Map((d.events || []).map((e) => [e.id, e]));
+      const photos = (d.photos || []).filter((p) => !String(p.id).startsWith('cards-') && p.kind !== 'video' && p.url);
+      const albums = (d.categories || []).filter((c) => photos.some((p) => p.categoryId === c.id)).map((c) => {
+        const e = evs.get(c.eventId);
+        return { id: `ev-${c.id}`, name: c.name, event: e ? e.title : '', date: e ? e.date : '', link: e ? `${EVENTS_URL}/e/${e.id}` : '' };
+      });
+      eventsPart = {
+        albums,
+        photos: photos.map((p) => ({
+          id: `ev-${p.id}`, album: `ev-${p.categoryId}`, url: `${EVENTS_URL}${p.url}`, thumb: p.thumb ? `${EVENTS_URL}${p.thumb}` : `${EVENTS_URL}${p.url}`,
+          caption: p.caption || '', by: '', ts: p.createdAt || 0, w: p.w || null, h: p.h || null,
+        })),
+      };
+    } catch {}
+  }
+  pullEvents();
+  setInterval(pullEvents, 60e3);
+
+  // the event's day (first schedule item, India time), so its album sorts among the events site's ones
+  const eventDay = () => ctx.dayKey(db.prepare('SELECT MIN(starts_at) t FROM schedule').get().t || now());
+
   app.get('/api/gallery', (req, res) => {
     if (!U.limit(db, `gallery:${req.ip_}`, 240, 60e3)) return res.status(429).json({});
     const s = U.getSettings(db);
-    const photos = db.prepare(`SELECT ph.id, ph.caption, ph.reviewed_at, ph.created_at, p.name FROM photos ph JOIN people p ON p.id = ph.person_id
+    const own = db.prepare(`SELECT ph.id, ph.caption, ph.reviewed_at, ph.created_at, p.name FROM photos ph JOIN people p ON p.id = ph.person_id
       WHERE ph.status = 'approved' AND p.disabled = 0 ORDER BY COALESCE(ph.reviewed_at, ph.created_at) DESC LIMIT 1000`).all()
-      .map((x) => ({ id: x.id, url: `/photo/${x.id}`, caption: x.caption || '', by: firstName(x.name), ts: x.created_at }));
-    res.set('cache-control', 'no-store').json({ event_name: s.event_name, photos });
+      .map((x) => ({ id: x.id, album: 'gn', url: `/photo/${x.id}`, caption: x.caption || '', by: firstName(x.name), ts: x.created_at }));
+    // ?own=1 is what the events site pulls: just the photos people shared here
+    if (req.query.own) return res.set('cache-control', 'no-store').json({ event_name: s.event_name, photos: own });
+    const albums = [
+      ...(own.length ? [{ id: 'gn', name: s.event_name, event: s.event_name, date: eventDay(), link: '' }] : []),
+      ...eventsPart.albums,
+    ].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    res.set('cache-control', 'no-store').json({ event_name: s.event_name, albums, photos: [...own, ...eventsPart.photos] });
   });
 
   // a photo: approved = anyone; pending or rejected = only the person who sent it, or an organiser
