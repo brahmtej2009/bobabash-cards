@@ -65,7 +65,9 @@ module.exports = function gallery(ctx) {
     const rows = db.prepare(`SELECT ph.id, ph.caption, ph.status, ph.size, ph.created_at, ph.reviewed_by, ph.reviewed_at, p.id person_id, p.name
       FROM photos ph JOIN people p ON p.id = ph.person_id WHERE ph.status = ? ORDER BY ph.created_at ${status === 'pending' ? 'ASC' : 'DESC'} LIMIT 500`).all(status);
     const counts = Object.fromEntries(STATES.map((s) => [s, db.prepare('SELECT COUNT(*) n FROM photos WHERE status = ?').get(s).n]));
-    return { open: open(), counts, photos: rows.map((x) => ({ ...x, url: `/photo/${x.id}` })) };
+    // who shared the most: approved photos only
+    const top = db.prepare("SELECT p.id person_id, p.name, COUNT(*) n FROM photos ph JOIN people p ON p.id = ph.person_id WHERE ph.status = 'approved' GROUP BY p.id ORDER BY n DESC, MIN(ph.created_at) ASC LIMIT 5").all();
+    return { open: open(), counts, top, photos: rows.map((x) => ({ ...x, url: `/photo/${x.id}` })) };
   }));
 
   app.post('/api/admin/photos/:id', wrap((req) => {
