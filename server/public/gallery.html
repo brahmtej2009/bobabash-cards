@@ -19,8 +19,44 @@
       <h1>Gallery</h1>
       <p id="sub">Photos from the people who were there.</p>
     </div>
+    <button class="add play" id="ssStart" type="button" hidden>▶ Slideshow</button>
     <a class="add" href="/me">+ Add your photos</a>
   </header>
+
+  <!-- slideshow: full screen, one photo at a time -->
+  <div class="ss" id="ss" hidden>
+    <img class="ss-img" id="ssA" alt="">
+    <img class="ss-img" id="ssB" alt="">
+    <div class="ss-cap" id="ssCap"><b id="ssCapT"></b><span id="ssCapBy"></span></div>
+    <div class="ss-count" id="ssCount"></div>
+    <div class="ss-bar"><i id="ssProg"></i></div>
+
+    <div class="ss-timer" id="ssTimer" hidden>
+      <span class="t" id="tClock">05:00</span>
+      <span class="ss-done" id="tDone" hidden>Time's up!</span>
+    </div>
+
+    <div class="ss-ui" id="ssUi">
+      <button type="button" id="ssPrev" title="Previous (←)">‹</button>
+      <button type="button" id="ssPlay" title="Pause / play (Space)">❚❚</button>
+      <button type="button" id="ssNext" title="Next (→)">›</button>
+      <span class="ss-seg" id="ssSpeed">
+        <button type="button" data-ms="12000">Slow</button>
+        <button type="button" data-ms="7000">Normal</button>
+        <button type="button" data-ms="3500">Fast</button>
+      </span>
+      <span class="ss-sep"></span>
+      <span class="ss-timerset">
+        <input id="tMin" type="number" min="1" max="180" value="5" aria-label="Timer minutes"><span>min</span>
+        <button type="button" id="tGo" title="Start / pause the timer (T)">⏱ Start timer</button>
+        <button type="button" id="tReset" title="Reset timer">↺</button>
+        <button type="button" id="tHide" title="Hide timer">✕</button>
+      </span>
+      <span class="ss-sep"></span>
+      <button type="button" id="ssFs" title="Full screen (F)">⛶</button>
+      <button type="button" id="ssExit" title="Close (Esc)">Close</button>
+    </div>
+  </div>
 
   <main>
     <p class="empty" id="empty" hidden>No photos yet. Log in at <a href="/me">your dashboard</a> and add the first one!</p>
