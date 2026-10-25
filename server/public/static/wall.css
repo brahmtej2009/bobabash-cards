@@ -46,3 +46,18 @@ footer.urgent { color: #c8373c; }
   body { height: auto; overflow: auto; font-size: 14px; }
   main { grid-template-columns: 1fr; }
 }
+
+/* two counters, the event-over card, and a full-height most-tapped list */
+.nums { grid-template-columns: repeat(2, 1fr); }
+.nums div:nth-child(2) { background: var(--blue); }
+.over { display: grid; gap: 1vh; margin: 0 0 1.4vh; padding: 2.4vh 1.6vw; border: .3vh solid var(--ink); border-radius: 1.6vh; background: var(--yellow); box-shadow: 0 .5vh 0 var(--ink); }
+.over b { font: 800 4.4vh/1.05 "Baloo 2", sans-serif; }
+.over span { font-size: 2.2vh; font-weight: 500; }
+.over + #sched + h2.gap, .over:not([hidden]) ~ h2.gap { margin-top: 1.4vh; }
+.col { display: flex; flex-direction: column; }
+.board.tall { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.board.tall li { flex: 1; max-height: 7.2vh; padding: .6vh 0; font-size: 2.6vh; }
+.board.tall .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board.tall li:nth-child(2) .rk { background: #e6e6e6; }
+.board.tall li:nth-child(3) .rk { background: #f0c9a0; }
+[hidden] { display: none !important; }

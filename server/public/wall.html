@@ -18,7 +18,6 @@
   </header>
   <section class="nums">
     <div><b id="nTaps">0</b><span>taps today</span></div>
-    <div><b id="nHere">0</b><span>people here</span></div>
     <div><b id="nTotal">0</b><span>taps all time</span></div>
   </section>
   <main>
@@ -27,16 +26,22 @@
       <ol class="feed" id="feed"></ol>
     </section>
     <section class="col">
-      <h2>Now</h2>
-      <div id="now" class="sched"></div>
-      <h2 class="gap">Next</h2>
-      <div id="next" class="sched"></div>
+      <div id="over" class="over" hidden>
+        <b>That's a wrap! 🧋</b>
+        <span>Boba Bash Greater Noida is over. Thanks for coming! Your card still works: tap it any time.</span>
+      </div>
+      <div id="sched">
+        <h2>Now</h2>
+        <div id="now" class="sched"></div>
+        <h2 class="gap">Next</h2>
+        <div id="next" class="sched"></div>
+      </div>
+      <h2 class="gap" id="teamsTitle">Teams</h2>
+      <ol class="board" id="board"></ol>
     </section>
     <section class="col">
-      <h2 id="boardTitle">Teams</h2>
-      <ol class="board" id="board"></ol>
-      <h2 class="gap">Most tapped today</h2>
-      <ol class="board small" id="taps"></ol>
+      <h2>Most tapped today</h2>
+      <ol class="board tall" id="taps"></ol>
     </section>
   </main>
   <footer><span id="ticker"></span></footer>

@@ -23,7 +23,6 @@
     document.title = `${w.event_name} · live`;
     $('#note').textContent = w.note || `Tap a card on any phone · ${w.card_base.replace(/^https?:\/\//, '')}`;
     $('#nTaps').textContent = w.taps_today;
-    $('#nHere').textContent = w.here;
     $('#nTotal').textContent = w.taps_total;
 
     const fresh = new Set();
@@ -38,19 +37,17 @@
     $('#now').replaceChildren(...(w.now.length ? w.now.map((x) => el('div', 'it live', el('b', '', x.title), el('span', '', [x.place, x.ends_at ? `until ${time(x.ends_at)}` : null].filter(Boolean).join(' · ')))) : [el('div', 'empty', 'Nothing on right now.')]));
     $('#next').replaceChildren(...(w.next.length ? w.next.map((x) => el('div', 'it', el('b', '', x.title), el('span', '', [time(x.starts_at), x.place].filter(Boolean).join(' · ')))) : [el('div', 'empty', 'Nothing else scheduled.')]));
 
-    const board = $('#board');
-    if (w.teams.length) {
-      $('#boardTitle').textContent = 'Teams';
-      board.replaceChildren(...w.teams.map((t, i) => {
-        const sw = el('span', 'sw');
-        sw.style.background = t.color || '#f2c14e';
-        return el('li', '', el('span', 'rk', i + 1), sw, el('span', '', t.name), el('span', 'pts', t.points));
-      }));
-    } else {
-      $('#boardTitle').textContent = 'Points';
-      board.replaceChildren(...(w.top_people.length ? w.top_people.map((p, i) => el('li', '', el('span', 'rk', i + 1), el('span', '', p.name), el('span', 'pts', p.points))) : [el('li', 'empty', 'No points yet.')]));
-    }
-    $('#taps').replaceChildren(...(w.top_taps.length ? w.top_taps.slice(0, 5).map((t, i) => el('li', '', el('span', 'rk', i + 1), el('span', '', t.name || `Card ${t.card}`), el('span', 'pts', t.n))) : [el('li', 'empty', 'Nobody yet.')]));
+    // once the last thing on the schedule has ended, the middle column says so instead of an empty Now/Next
+    $('#over').hidden = !w.over;
+    $('#sched').hidden = !!w.over;
+
+    $('#teamsTitle').hidden = !w.teams.length;
+    $('#board').replaceChildren(...w.teams.map((t) => {
+      const sw = el('span', 'sw');
+      sw.style.background = t.color || '#f2c14e';
+      return el('li', '', sw, el('span', '', t.name), el('span', 'pts', `${t.members} ${t.members === 1 ? 'person' : 'people'}`));
+    }));
+    $('#taps').replaceChildren(...(w.top_taps.length ? w.top_taps.map((t, i) => el('li', '', el('span', 'rk', i + 1), el('span', 'nm', t.name || `Card ${t.card}`), el('span', 'pts', t.n))) : [el('li', 'empty', 'Nobody yet.')]));
 
     const n = w.notice;
     $('footer').classList.toggle('urgent', !!n?.urgent);

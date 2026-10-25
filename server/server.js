@@ -316,7 +316,7 @@ app.get('/api/wall', (req, res) => {
   const t0 = todayStart();
   const named = (cardId) => first(people.get(cardOwner.get(cardId)));
   const feed = db.prepare('SELECT card_id, ts FROM scans ORDER BY ts DESC LIMIT 14').all().map((r) => ({ card: r.card_id, ts: r.ts, name: named(r.card_id) }));
-  const topTaps = db.prepare('SELECT card_id, COUNT(*) n FROM scans WHERE ts > ? GROUP BY card_id ORDER BY n DESC LIMIT 8').all(t0)
+  const topTaps = db.prepare('SELECT card_id, COUNT(*) n FROM scans WHERE ts > ? GROUP BY card_id ORDER BY n DESC LIMIT 15').all(t0)
     .map((r) => ({ card: r.card_id, n: r.n, name: named(r.card_id) }));
   const all = [...people.values()].filter((p) => !p.disabled);
   const topPeople = all.filter((p) => p.points > 0).sort((a, b) => b.points - a.points).slice(0, 8)
@@ -324,11 +324,13 @@ app.get('/api/wall', (req, res) => {
   const teamBoard = teams.map((t) => {
     const members = all.filter((p) => p.team_id === t.id);
     return { name: t.name, color: t.color, members: members.length, points: t.points + members.reduce((a, p) => a + p.points, 0) };
-  }).sort((a, b) => b.points - a.points).slice(0, 8);
+  }).filter((t) => t.members).sort((a, b) => b.members - a.members || a.name.localeCompare(b.name)).slice(0, 8);
   const sched = db.prepare('SELECT * FROM schedule ORDER BY starts_at').all();
   const t = now();
   const current = sched.filter((x) => x.starts_at <= t && (x.ends_at ? x.ends_at > t : x.starts_at + 3600e3 > t));
   const next = sched.filter((x) => x.starts_at > t).slice(0, 3);
+  // the event is over once the last schedule item has ended
+  const over = sched.length > 0 && sched.every((x) => (x.ends_at || x.starts_at + 3600e3) <= t);
   const notice = db.prepare("SELECT title, body, ts, urgent FROM notices WHERE target_kind = 'all' ORDER BY ts DESC LIMIT 1").get() || null;
   res.set('cache-control', 'no-store').json({
     event_name: s.event_name, note: s.wall_note, card_base: s.card_base,
@@ -336,7 +338,7 @@ app.get('/api/wall', (req, res) => {
     taps_total: db.prepare('SELECT COALESCE(SUM(scans), 0) n FROM cards').get().n,
     here: db.prepare('SELECT COUNT(*) n FROM people WHERE checked_in_at IS NOT NULL AND disabled = 0').get().n,
     people: all.length,
-    feed, top_taps: topTaps, top_people: topPeople, teams: teamBoard,
+    feed, top_taps: topTaps, top_people: topPeople, teams: teamBoard, over,
     now: current.map(({ title, place, starts_at, ends_at }) => ({ title, place, starts_at, ends_at })),
     next: next.map(({ title, place, starts_at }) => ({ title, place, starts_at })),
     notice,
