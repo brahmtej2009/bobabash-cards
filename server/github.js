@@ -4,7 +4,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { now, getSettings, setSettings, resolve, projectUrl, parseJson, cardFolder, DEFAULT_SETTINGS } = require('./util');
+const { now, getSettings, setSettings, resolve, projectUrl, parseJson, DEFAULT_SETTINGS } = require('./util');
 const { renderProfile, vcard, hasContact } = require('./profile');
 
 const API = 'https://api.github.com';
@@ -117,11 +117,22 @@ async function syncRedirectRepo(db, s, dataDir) {
     if (p.endsWith('index.html')) profiles++;
   }
 
-  // The chips and QR codes open sites/<n> (its loader page, kept by the sites sync), so no pages at the root.
-  if (!Object.keys(want).length) return { repo, changed: 0, note: '' };
-  const parts = [want['map.json'] ? 'map' : '', profiles ? `${profiles} profile${profiles === 1 ? '' : 's'}` : ''].filter(Boolean).join(' + ') || 'avatars';
+  const tplSha = st.files.get('card.html');
+  let pages = 0;
+  if (tplSha) {
+    let tpl = null;
+    for (const { id } of db.prepare('SELECT id FROM cards ORDER BY id').all()) {
+      // identical content = identical blob id, so stale or missing pages are the ones whose id differs
+      if (st.files.get(`${id}/index.html`) === tplSha) continue;
+      tpl = tpl || (await readBlob(repo, tplSha));
+      want[`${id}/index.html`] = tpl;
+      pages++;
+    }
+  }
+  if (!Object.keys(want).length) return { repo, changed: 0, note: tplSha ? '' : 'No card.html in the repo yet, so no card pages were made.' };
+  const parts = [want['map.json'] ? 'map' : '', pages ? `${pages} card page${pages === 1 ? '' : 's'}` : '', profiles ? `${profiles} profile${profiles === 1 ? '' : 's'}` : ''].filter(Boolean).join(' + ') || 'avatars';
   await commit(repo, st, want, `Cards: update ${parts}`);
-  return { repo, changed: Object.keys(want).length, note: '' };
+  return { repo, changed: Object.keys(want).length, note: tplSha ? '' : 'No card.html in the repo yet, so no card pages were made.' };
 }
 
 // ---------- host 2 ----------
@@ -145,11 +156,11 @@ async function syncSitesRepo(db, s) {
   const tplSha = st.files.get(`${P}template/index.html`);
   if (!tplSha) return { repo, changed: 0, note: `No ${P}template/index.html in the sites repo yet, so no folders were made.` };
   const have = new Set([...st.files.keys()].filter((p) => p.startsWith(P)).map((p) => p.slice(P.length).split('/')[0]));
-  const missing = db.prepare("SELECT id FROM cards WHERE status = 'active' AND person_id IS NOT NULL ORDER BY id").all().map((r) => r.id).filter((id) => !have.has(cardFolder(id)));
+  const missing = db.prepare("SELECT id FROM cards WHERE status = 'active' AND person_id IS NOT NULL ORDER BY id").all().map((r) => r.id).filter((id) => !have.has(String(id)));
   const want = {};
   if (missing.length) {
     const tpl = (await readBlob(repo, tplSha)).toString('utf8');
-    for (const id of missing) want[`${P}${cardFolder(id)}/index.html`] = Buffer.from(tpl.replaceAll('{{id}}', cardFolder(id)));
+    for (const id of missing) want[`${P}${id}/index.html`] = Buffer.from(tpl.replaceAll('{{id}}', String(id)));
   }
   // The printed QR codes open sites/<n> (no slash). <n>.html answers that address: the logo, then it asks the
   // dashboard where the card goes, so QR scans follow the same settings as taps. The project stays in <n>/.

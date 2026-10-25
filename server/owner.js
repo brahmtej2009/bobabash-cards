@@ -262,27 +262,6 @@ module.exports = function owner(ctx) {
     return view(core.getPerson(db, p.id));
   }));
 
-  // their GitHub username: a pull request from that account to their card's folder merges by itself
-  app.post('/api/me/github', wrap((req) => {
-    const p = needOwner(req);
-    U.mustLimit(db, `me-github:${p.id}`, 20, 3600e3);
-    core.updatePerson(db, p.id, { github: req.body?.github ?? '' }, `owner:${p.id}`);
-    return view(core.getPerson(db, p.id));
-  }));
-
-  // Asked by the projects repo's GitHub Action: does this GitHub account hold this card?
-  // Only yes/no comes back, never whose card it is or their username.
-  app.get('/api/github-check', (req, res) => {
-    if (!U.limit(db, `ghcheck:${req.ip_}`, 120, 60e3)) return res.status(429).json({});
-    const n = U.parseCard(req.query.card);
-    const card = n == null ? null : core.getCard(db, n);
-    const p = card?.person_id ? core.getPerson(db, card.person_id) : null;
-    const login = String(req.query.login || '').trim().toLowerCase();
-    const gh = String(p?.github || '').trim().toLowerCase();
-    const live = !!p && !p.disabled && card.status === 'active';
-    res.set('cache-control', 'no-store').json({ card: !!card, held: live, has_github: live && !!gh, match: live && !!gh && !!login && gh === login });
-  });
-
   app.get('/api/me/stats', wrap((req) => {
     const p = needOwner(req);
     return tapStats(core.cardsOf(db, p.id).map((c) => c.id));

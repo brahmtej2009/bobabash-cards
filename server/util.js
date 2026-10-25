@@ -104,8 +104,7 @@ const DEFAULT_SETTINGS = {
   // one GitHub Pages repo can hold both: redirect pages at the root, projects under sites_dir/
   repo: 'bobabash/bobabash.github.io',
   sites_dir: 'sites',
-  // {nn} = card number padded like the printed ID (grn07 -> 07), {id} = plain number
-  project_template: 'https://bobabash.github.io/sites/{nn}/',
+  project_template: 'https://bobabash.github.io/sites/{id}/',
   // host 3: this dashboard, as the world reaches it (the redirect pages ask it live)
   dashboard_url: 'https://cards.boba-bash.xyz',
   inactive_url: '',
@@ -148,9 +147,7 @@ function cardLocked(card, s) {
   return globalLocked(s);
 }
 
-// each card's project folder is named like its printed ID: grn07 -> sites/07/
-const cardFolder = (id) => String(id).padStart(2, '0');
-const projectUrl = (s, cardId) => String(s.project_template || '').replaceAll('{nn}', cardFolder(cardId)).replaceAll('{id}', String(cardId));
+const projectUrl = (s, cardId) => String(s.project_template || '').replaceAll('{id}', String(cardId));
 // profiles belong to a person, so a person with a replaced card keeps the same profile link
 const profileUrl = (s, personId) => `${String(s.card_base || '').replace(/\/$/, '')}/p/${personId}/`;
 
@@ -211,6 +208,6 @@ module.exports = {
   now, HttpError, fail, randomHex, randomDigits, sha256, hashSecret, checkSecret, safeEqual, cleanPassword,
   hashPin: hashSecret, checkPin: checkSecret,
   cleanEmail, cleanUrl, cleanText, cleanGithub, cardId,
-  parseCard, cardLabel, cardFolder, DEFAULT_SETTINGS, getSettings, setSettings, globalLocked, cardLocked, projectUrl, profileUrl, tagsOf, parseJson, overrideActive, resolve,
+  parseCard, cardLabel, DEFAULT_SETTINGS, getSettings, setSettings, globalLocked, cardLocked, projectUrl, profileUrl, tagsOf, parseJson, overrideActive, resolve,
   limit, mustLimit, audit,
 };
