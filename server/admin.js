@@ -927,8 +927,8 @@ module.exports = function admin(ctx) {
     if ('unlock_at' in b) set.unlock_at = ms(b.unlock_at, 'unlock time');
     if ('project_template' in b) {
       const t = String(b.project_template || '').trim();
-      if (!t.includes('{id}')) fail(400, 'The project link needs {id} in it, where the card number goes.');
-      U.cleanUrl(t.replaceAll('{id}', '1'));
+      if (!t.includes('{id}') && !t.includes('{nn}')) fail(400, 'The project link needs {nn} (07) or {id} (7) in it, where the card number goes.');
+      U.cleanUrl(t.replaceAll('{nn}', '01').replaceAll('{id}', '1'));
       set.project_template = t;
     }
     if ('card_base' in b) set.card_base = U.cleanUrl(b.card_base).replace(/\/$/, '');

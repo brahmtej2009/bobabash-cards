@@ -423,7 +423,7 @@
         fill($('#prLine'), el('span', { class: `tag ${state}`, text: state === 'merged' ? 'live' : state === 'open' ? (best.approved ? 'approved' : 'in review') : 'closed' }), ' ',
           el('a', { href: best.url, target: '_blank', rel: 'noopener', text: `PR #${best.number}` }), ` ${best.title}`);
       } else fill($('#prLine'), 'No pull request yet.');
-      fill($('#howTo'), c.sites_repo ? ['Build it in the ', el('code', { text: `${k.id}/` }), ' folder of ', el('a', { href: `https://github.com/${c.sites_repo}#readme`, target: '_blank', rel: 'noopener', text: c.sites_repo }), ' and open a pull request.'] : null);
+      fill($('#howTo'), c.sites_repo ? ['Build it in the ', el('code', { text: `sites/${String(k.id).padStart(2, '0')}/` }), ' folder of ', el('a', { href: `https://github.com/${c.sites_repo}#readme`, target: '_blank', rel: 'noopener', text: c.sites_repo }), ' and open a pull request.', c.github ? ` From @${c.github} it merges by itself.` : ' Add your GitHub under Account and it merges by itself.'] : null);
     }
 
     // ---- team ----
@@ -463,6 +463,7 @@
     g.textContent = '';
     if (c.public.instructions_md.trim()) g.append(window.renderMarkdown(c.public.instructions_md));
     else g.append(el('p', { class: 'sub', text: 'No guide yet. Check back during the event.' }));
+    if (document.activeElement !== $('#ghForm').github) $('#ghForm').github.value = c.github || '';
     fill($('#accInfo'), el('b', { text: c.name }), el('br'), c.email || '', c.github ? ` · @${c.github}` : '', c.tags.length ? el('br') : null, c.tags.length ? `Tags: ${c.tags.join(', ')}` : '');
     renderAlerts();
   }
@@ -632,6 +633,11 @@
   });
 
   // ---------- account ----------
+  $('#ghForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = e.currentTarget;
+    guard(f, async () => { render(await api('/api/me/github', { github: f.github.value.trim() })); toast(f.github.value.trim() ? 'Saved. PRs from that account merge by themselves.' : 'Removed.'); });
+  });
   $('#pwForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const f = e.currentTarget;
