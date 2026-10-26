@@ -274,3 +274,21 @@ code { padding: 1px 6px; border-radius: 6px; background: #f1e8d4; font-size: 12.
 .state.approved { background: #e3f6ec; color: #17733f; }
 .state.rejected { background: #fde8eb; color: #a3202f; }
 .badge.soft { background: var(--pink, #f7a8b8); color: var(--ink); }
+
+/* drop-to-upload: a full-screen target while dragging, then a live queue of tiles */
+.drop span { display: grid; gap: 2px; }
+.drop b { font-size: 16px; }
+.drop small { color: #7a6650; font-weight: 500; }
+.drop-over { position: fixed; inset: 12px; z-index: 60; display: grid; place-items: center; border: 4px dashed var(--ink); border-radius: 24px; background: rgba(251, 246, 232, .92); pointer-events: none; }
+.drop-over span { padding: 18px 28px; border: 2px solid var(--ink); border-radius: 999px; background: var(--yellow, #f2c14e); box-shadow: 4px 4px 0 var(--ink); font: 800 26px "Baloo 2", sans-serif; }
+.upq { margin: 4px 0 8px; }
+.myphoto.up img { opacity: .55; transition: opacity .3s; }
+.myphoto.up.busy img { animation: upPulse 1s ease-in-out infinite alternate; }
+.myphoto.up.ok img, .myphoto.up.dup img { opacity: 1; }
+.myphoto.up.ok { border-color: #17733f; }
+.myphoto.up.ok .state { background: #e3f6ec; color: #17733f; }
+.myphoto.up.dup .state { background: #eee; color: #555; }
+.myphoto.up.failed { border-color: #a3202f; }
+.myphoto.up.failed .state { background: #fde8eb; color: #a3202f; white-space: normal; }
+@keyframes upPulse { from { opacity: .35; } to { opacity: .8; } }
+@media (prefers-reduced-motion: reduce) { .myphoto.up.busy img { animation: none; } }

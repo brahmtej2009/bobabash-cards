@@ -578,8 +578,10 @@
     try { renderPhotos(await api('/api/me/photos')); } catch {}
   }
   function renderPhotos(r) {
-    $('#photoClosed').hidden = r.open;
-    $$('#photoForm input, #photoForm button').forEach((x) => (x.disabled = !r.open));
+    const open = r.open !== false; // replies without the flag mean nothing changed
+    $('#photoClosed').hidden = open;
+    uploadsOpen = open;
+    $$('#photoForm input').forEach((x) => (x.disabled = !open));
     const waiting = r.photos.filter((p) => p.status === 'pending').length;
     $('#navPhotos').hidden = !waiting;
     $('#navPhotos').textContent = waiting;
@@ -593,42 +595,133 @@
           try { renderPhotos(await api(`/api/me/photos/${p.id}/delete`, {})); toast('Deleted.'); } catch (x) { toast(x.message, true); }
         } })))) : el('p', { class: 'empty-note', text: 'No photos yet. Your first one goes here.' }));
   }
-  $('#photoFiles').addEventListener('change', (e) => {
-    const n = e.target.files.length;
-    $('#photoPick').textContent = n ? `${n} photo${n === 1 ? '' : 's'} picked. Tap Upload.` : 'Tap to choose photos';
-  });
-  $('#photoForm').addEventListener('submit', async (e) => {
+  // ---------- drop, pick or paste: every photo uploads straight away ----------
+  // Each file gets a tile in the queue at once (a local preview), then uploads two at a time.
+  // When the queue empties, the list below refreshes and the finished tiles clear.
+  let uploadsOpen = true;
+  const upQueue = [];
+  let upActive = 0, upTotal = 0, upDone = 0, upStats = { ok: 0, dup: 0, fail: 0 }, upLast = null;
+  const isImage = (f) => f.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|avif|heic|heif)$/i.test(f.name || '');
+
+  function addPhotos(list) {
+    const files = [...(list || [])].filter(isImage);
+    if (!files.length) return;
+    if (!uploadsOpen) { toast('Photo uploads are closed right now.', true); return; }
+    if (current !== 'gallery') tab('gallery');
+    const box = $('#upQueue');
+    box.hidden = false;
+    errOf($('#photoForm')).textContent = '';
+    const caption = $('#photoForm').caption.value.trim();
+    for (const file of files) {
+      const url = URL.createObjectURL(file);
+      const st = el('span', { class: 'state', text: 'waiting…' });
+      const tile = el('div', { class: 'myphoto up' }, el('img', { src: url, alt: '' }), el('div', { class: 'mp-meta' }, st));
+      box.append(tile);
+      upQueue.push({ file, url, tile, st, caption });
+    }
+    upTotal += files.length;
+    pumpUploads();
+  }
+
+  function upProgress() {
+    $('#photoProgress').textContent = upActive || upQueue.length ? `Uploading ${Math.min(upDone + 1, upTotal)} of ${upTotal}…` : '';
+  }
+
+  function pumpUploads() {
+    while (upActive < 2 && upQueue.length) {
+      const job = upQueue.shift();
+      upActive++;
+      sendPhoto(job).finally(() => {
+        upActive--;
+        upDone++;
+        if (!upActive && !upQueue.length) uploadsFinished();
+        else pumpUploads();
+      });
+    }
+    upProgress();
+  }
+
+  async function sendPhoto(job) {
+    job.st.textContent = 'uploading…';
+    job.tile.classList.add('busy');
+    try {
+      const { blob, hash } = await shrink(job.file);
+      const res = await fetch('/api/me/photos', {
+        method: 'POST', credentials: 'same-origin', body: blob,
+        headers: { 'content-type': blob.type || 'application/octet-stream', 'x-caption': encodeURIComponent(job.caption), 'x-dhash': hash },
+      });
+      const out = await res.json().catch(() => ({}));
+      if (res.status === 409) { job.tile.classList.add('dup'); job.st.textContent = 'already in the gallery'; upStats.dup++; return; }
+      if (!res.ok) throw new Error(out.error || 'Upload failed.');
+      upLast = out;
+      job.tile.classList.add('ok');
+      job.st.textContent = 'sent ✓';
+      upStats.ok++;
+    } catch (x) {
+      job.tile.classList.add('failed');
+      job.st.textContent = x.message;
+      job.st.title = x.message;
+      upStats.fail++;
+    } finally {
+      job.tile.classList.remove('busy');
+      upProgress();
+    }
+  }
+
+  function uploadsFinished() {
+    const { ok, dup, fail } = upStats;
+    if (upLast) renderPhotos(upLast);
+    const bits = [ok ? `${ok} sent, waiting for approval` : '', dup ? `${dup} already in the gallery` : '', fail ? `${fail} failed` : ''].filter(Boolean);
+    if (bits.length) toast(bits.join(' · '), !ok && fail > 0);
+    upTotal = upDone = 0;
+    upStats = { ok: 0, dup: 0, fail: 0 };
+    upLast = null;
+    upProgress();
+    // sent ones now sit in "Your photos"; the rest stay a moment so people can read why
+    setTimeout(() => {
+      for (const t of [...$('#upQueue').children]) {
+        if (upQueue.length || upActive) return; // a new batch started meanwhile
+        if (t.classList.contains('ok') || t.classList.contains('dup')) { URL.revokeObjectURL(t.querySelector('img')?.src); t.remove(); }
+      }
+      if (!$('#upQueue').children.length) $('#upQueue').hidden = true;
+    }, 2500);
+    setTimeout(() => {
+      if (upQueue.length || upActive) return;
+      for (const t of [...$('#upQueue').children]) { URL.revokeObjectURL(t.querySelector('img')?.src); t.remove(); }
+      $('#upQueue').hidden = true;
+    }, 12000);
+  }
+
+  $('#photoFiles').addEventListener('change', (e) => { addPhotos(e.target.files); e.target.value = ''; });
+  $('#photoForm').addEventListener('submit', (e) => e.preventDefault()); // Enter in the caption box shouldn't do anything
+
+  // drag photos anywhere onto the dashboard
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+  let dragDepth = 0;
+  document.addEventListener('dragenter', (e) => {
+    if (!hasFiles(e) || $('#app').hidden) return;
     e.preventDefault();
-    const f = e.currentTarget;
-    const files = [...f.files.files];
-    errOf(f).textContent = '';
-    if (!files.length) { errOf(f).textContent = 'Pick a photo first.'; return; }
-    $('#photoBtn').disabled = true;
-    let done = 0, twins = 0, last = null;
-    for (const [n, file] of files.entries()) {
-      $('#photoProgress').textContent = `Uploading ${n + 1} of ${files.length}…`;
-      try {
-        const { blob, hash } = await shrink(file);
-        const res = await fetch('/api/me/photos', {
-          method: 'POST', credentials: 'same-origin', body: blob,
-          headers: { 'content-type': blob.type || 'application/octet-stream', 'x-caption': encodeURIComponent(f.caption.value.trim()), 'x-dhash': hash },
-        });
-        const out = await res.json().catch(() => ({}));
-        if (res.status === 409) { twins++; continue; } // already in the gallery: skip it, keep going
-        if (!res.ok) throw new Error(out.error || 'Upload failed.');
-        last = out;
-        done++;
-      } catch (x) { errOf(f).textContent = `${file.name}: ${x.message}`; break; }
-    }
-    $('#photoBtn').disabled = false;
-    $('#photoProgress').textContent = '';
-    if (last) renderPhotos(last);
-    if (twins) errOf(f).textContent = `${twins} photo${twins === 1 ? ' was' : 's were'} skipped: already in the gallery.`;
-    if (done) {
-      toast(`${done} photo${done === 1 ? '' : 's'} sent. They show in the gallery once an organiser approves.`);
-      f.reset();
-      $('#photoPick').textContent = 'Tap to choose photos';
-    }
+    dragDepth++;
+    $('#dropOver').hidden = false;
+  });
+  document.addEventListener('dragover', (e) => { if (hasFiles(e) && !$('#app').hidden) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+  document.addEventListener('dragleave', (e) => {
+    if (!hasFiles(e)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) $('#dropOver').hidden = true;
+  });
+  document.addEventListener('drop', (e) => {
+    if (!hasFiles(e) || $('#app').hidden) return;
+    e.preventDefault();
+    dragDepth = 0;
+    $('#dropOver').hidden = true;
+    addPhotos(e.dataTransfer.files);
+  });
+  // paste screenshots / copied images while on the gallery page
+  document.addEventListener('paste', (e) => {
+    if ($('#app').hidden || current !== 'gallery') return;
+    const files = [...(e.clipboardData?.files || [])];
+    if (files.length) { e.preventDefault(); addPhotos(files); }
   });
 
   // ---------- account ----------

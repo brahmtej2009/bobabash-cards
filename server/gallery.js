@@ -46,7 +46,7 @@ module.exports = function gallery(ctx) {
     db.prepare("INSERT INTO photos (id, person_id, mime, size, caption, sha, dhash, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)")
       .run(id, p.id, mime, buf.length, caption, sha, dh, now());
     U.audit(db, `owner:${p.id}`, 'uploaded a photo', { person: p.id }, caption);
-    return { ok: true, photos: mine(p) };
+    return { ok: true, open: open(), photos: mine(p) };
   }));
 
   app.post('/api/me/photos/:id/delete', wrap((req) => {
@@ -55,7 +55,7 @@ module.exports = function gallery(ctx) {
     if (!ph) fail(404, 'No such photo.');
     remove(ph.id);
     U.audit(db, `owner:${p.id}`, 'deleted their photo', { person: p.id });
-    return { ok: true, photos: mine(p) };
+    return { ok: true, open: open(), photos: mine(p) };
   }));
 
   // fingerprints within a few bits of each other are the same picture (re-saved, re-compressed, resized)
