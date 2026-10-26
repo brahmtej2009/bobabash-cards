@@ -38,6 +38,8 @@ module.exports = function gallery(ctx) {
     const dh = /^[0-9a-f]{16}$/.test(String(req.get('x-dhash') || '')) ? req.get('x-dhash') : null;
     const twin = db.prepare('SELECT person_id FROM photos WHERE sha = ? LIMIT 1').get(sha) || (dh && findTwin(dh));
     if (twin) fail(409, twin.person_id === p.id ? 'You already uploaded this photo.' : 'This photo is already in the gallery. Someone else shared it first.');
+    // the organisers' photos on the events site count too (same fingerprint recipe on both sites)
+    if (dh && eventsPart.photos.some((e) => e.dh && near(e.dh, dh))) fail(409, 'This photo is already in the gallery.');
     let caption = '';
     try { caption = decodeURIComponent(req.get('x-caption') || ''); } catch {}
     caption = U.cleanText(caption, 140) || null;
@@ -60,13 +62,13 @@ module.exports = function gallery(ctx) {
 
   // fingerprints within a few bits of each other are the same picture (re-saved, re-compressed, resized)
   const SAME = 6;
+  function near(a, b) {
+    let x = BigInt(`0x${a}`) ^ BigInt(`0x${b}`), bits = 0;
+    while (x) { bits += Number(x & 1n); x >>= 1n; }
+    return bits <= SAME;
+  }
   function findTwin(dh) {
-    const a = BigInt(`0x${dh}`);
-    for (const r of db.prepare('SELECT person_id, dhash FROM photos WHERE dhash IS NOT NULL').all()) {
-      let x = a ^ BigInt(`0x${r.dhash}`), bits = 0;
-      while (x) { bits += Number(x & 1n); x >>= 1n; }
-      if (bits <= SAME) return r;
-    }
+    for (const r of db.prepare('SELECT person_id, dhash FROM photos WHERE dhash IS NOT NULL').all()) if (near(dh, r.dhash)) return r;
     return null;
   }
 
@@ -139,7 +141,7 @@ module.exports = function gallery(ctx) {
         albums,
         photos: photos.map((p) => ({
           id: `ev-${p.id}`, album: `ev-${p.categoryId}`, url: `${EVENTS_URL}${p.url}`, thumb: p.thumb ? `${EVENTS_URL}${p.thumb}` : `${EVENTS_URL}${p.url}`,
-          caption: p.caption || '', by: '', ts: p.createdAt || 0, w: p.w || null, h: p.h || null,
+          caption: p.caption || '', by: p.by || '', ts: p.createdAt || 0, w: p.w || null, h: p.h || null, dh: /^[0-9a-f]{16}$/.test(p.dh || '') ? p.dh : null,
         })),
       };
     } catch {}
