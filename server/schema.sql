@@ -261,3 +261,20 @@ CREATE TABLE IF NOT EXISTS photos (
 );
 CREATE INDEX IF NOT EXISTS photos_status ON photos(status, created_at);
 CREATE INDEX IF NOT EXISTS photos_sha ON photos(sha);
+
+-- likes and comments on the event gallery (photos live on the events site; keyed by its photo ids)
+CREATE TABLE IF NOT EXISTS photo_likes (
+  photo_key TEXT NOT NULL,
+  person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  ts        INTEGER NOT NULL,
+  PRIMARY KEY (photo_key, person_id)
+);
+CREATE TABLE IF NOT EXISTS photo_comments (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  photo_key TEXT NOT NULL,
+  person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  body      TEXT NOT NULL,
+  ts        INTEGER NOT NULL,
+  hidden    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS photo_comments_key ON photo_comments(photo_key, ts);

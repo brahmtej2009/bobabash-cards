@@ -756,7 +756,8 @@
       $('#auth').hidden = true;
       $('#app').hidden = false;
       if (firstLoad) {
-        tab(store.get('me-tab') || 'home');
+        // cards.boba-bash.xyz/me#gallery (the events gallery's "Add your photos") opens the upload tab
+        tab(location.hash === '#gallery' ? 'gallery' : store.get('me-tab') || 'home');
         startLive();
       }
     } catch (x) {

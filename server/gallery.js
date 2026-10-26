@@ -147,6 +147,13 @@ module.exports = function gallery(ctx) {
   pullEvents();
   setInterval(pullEvents, 60e3);
 
+  // organisers see the events site's own photos too (read-only here: they're managed in events admin)
+  app.get('/api/admin/events-photos', wrap(async (req) => {
+    needDesk(req);
+    await pullEvents();
+    return eventsPart;
+  }));
+
   // the event's day (first schedule item, India time), so its album sorts among the events site's ones
   const eventDay = () => ctx.dayKey(db.prepare('SELECT MIN(starts_at) t FROM schedule').get().t || now());
 

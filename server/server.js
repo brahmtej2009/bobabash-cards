@@ -345,6 +345,19 @@ app.get('/api/wall', (req, res) => {
   });
 });
 
+// ---------- the events site's gallery: likes and comments (social.js) ----------
+// That one origin may call /api/social with the login cookie. Nothing else is opened up to it.
+const EVENTS_ORIGIN = new URL(process.env.EVENTS_URL || 'https://events.boba-bash.xyz').origin;
+app.use('/api/social', (req, res, next) => {
+  if (req.get('origin') !== EVENTS_ORIGIN) return next();
+  res.set({ 'access-control-allow-origin': EVENTS_ORIGIN, 'access-control-allow-credentials': 'true', vary: 'Origin' });
+  if (req.method === 'OPTIONS') {
+    res.set({ 'access-control-allow-methods': 'GET, POST', 'access-control-allow-headers': 'content-type', 'access-control-max-age': '600' });
+    return res.status(204).end();
+  }
+  next();
+});
+
 // ---------- API guard: writes must be same-origin ----------
 app.use('/api', (req, res, next) => {
   res.set('cache-control', 'no-store');
@@ -352,6 +365,7 @@ app.use('/api', (req, res, next) => {
   const origin = req.get('origin');
   let ok = false;
   try { ok = origin && new URL(origin).host === req.publicHost; } catch {}
+  if (!ok && origin === EVENTS_ORIGIN && req.path.startsWith('/social/')) ok = true; // likes + comments only
   if (!ok) return res.status(403).json({ error: 'Bad origin.' });
   next();
 });
@@ -367,6 +381,7 @@ app.use('/api', (req, res, next) => {
 require('./owner')(ctx);
 require('./admin')(ctx);
 require('./gallery')(ctx);
+require('./social')(ctx);
 
 // ---------- pages ----------
 const pub = path.join(__dirname, 'public');
@@ -393,7 +408,8 @@ app.get('/', sendPage('home.html'));
 app.get(['/me', '/me/'], sendPage('me.html'));
 app.get(['/admin', '/admin/'], sendPage('admin.html'));
 app.get(['/wall', '/wall/'], sendPage('wall.html'));
-app.get(['/gallery', '/gallery/'], sendPage('gallery.html'));
+// the public gallery lives on the events site now (uploads stay here, in each person's dashboard)
+app.get(['/gallery', '/gallery/'], (req, res) => res.redirect(302, `${process.env.EVENTS_URL || 'https://events.boba-bash.xyz'}/gallery`));
 app.get('/api/version', (req, res) => res.set('cache-control', 'no-store').json({ build: BUILD }));
 app.get('/favicon.ico', (req, res) => res.sendFile(path.join(pub, 'static', 'icon.png')));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));

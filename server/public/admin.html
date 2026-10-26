@@ -320,16 +320,19 @@
 
       <!-- ===== gallery ===== -->
       <section data-page="gallery" hidden>
-        <div class="head"><h2>Gallery</h2><span class="muted small">People upload from their dashboard. Approved photos show on the public gallery.</span><span class="grow"></span><a class="btn sm" href="/gallery" target="_blank" rel="noopener">Open public gallery ↗</a></div>
+        <div class="head"><h2>Gallery</h2><span class="muted small">People upload from their dashboard. Approved photos show on the public gallery (on the events site), where logged-in people can like and comment.</span><span class="grow"></span><a class="btn sm" href="https://events.boba-bash.xyz/gallery" target="_blank" rel="noopener">Open public gallery ↗</a></div>
         <div class="block linkbar" id="galBar">
           <div class="seg" id="galFilter">
             <button type="button" data-s="pending" class="on">Waiting <b id="galN_pending"></b></button>
             <button type="button" data-s="approved">Approved <b id="galN_approved"></b></button>
             <button type="button" data-s="rejected">Rejected <b id="galN_rejected"></b></button>
+            <button type="button" data-s="comments">Comments <b id="galN_comments"></b></button>
+            <button type="button" data-s="events">Events site photos <b id="galN_events"></b></button>
           </div>
           <span class="inline wrap">
             <button class="btn primary" type="button" id="galApproveAll">Approve all waiting</button>
             <label class="check" data-admin><input type="checkbox" id="galOpen"> Uploads open</label>
+            <label class="check" data-admin id="galCommentsOpenBox" hidden><input type="checkbox" id="galCommentsOpen"> Comments open</label>
           </span>
         </div>
         <div class="block" id="galTopBox" hidden>
@@ -337,6 +340,7 @@
           <ol class="podium" id="galTop"></ol>
         </div>
         <div class="photos" id="galGrid"></div>
+        <div class="list" id="galComments" hidden></div>
       </section>
 
       <!-- ===== cards ===== -->

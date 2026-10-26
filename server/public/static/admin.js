@@ -1251,8 +1251,46 @@
   // ================= gallery =================
   let galStatus = 'pending', galData = null;
   async function loadGallery() {
+    $$('#galFilter button').forEach((b) => b.classList.toggle('on', b.dataset.s === galStatus));
+    const social = galStatus === 'comments' || galStatus === 'events';
+    $('#galApproveAll').hidden = social;
+    $('#galTopBox').hidden = social;
+    $('#galComments').hidden = galStatus !== 'comments';
+    $('#galGrid').hidden = galStatus === 'comments';
+    $('#galCommentsOpenBox').hidden = galStatus !== 'comments';
+    if (galStatus === 'comments') return loadComments();
+    if (galStatus === 'events') return loadEventsPhotos();
     galData = await api(`/api/admin/photos?status=${galStatus}`);
     renderGallery();
+  }
+  // comments people leave on the public gallery (events site); organisers can delete any of them
+  async function loadComments() {
+    const r = await api('/api/admin/comments');
+    $('#galN_comments').textContent = r.comments.length || '';
+    $('#galCommentsOpen').checked = r.open;
+    $('#galComments').replaceChildren(...(r.comments.length ? r.comments.map((c) => el('div', {},
+      el('span', { class: 'row-main' }, pchip(c.person_id, c.name), el('span', { text: c.body }), el('span', { class: 'muted small', text: ` · ${ago(c.ts)}` })),
+      el('span', { class: 'inline' },
+        el('a', { class: 'btn sm ghost', href: `https://events.boba-bash.xyz/gallery?photo=${encodeURIComponent(c.photo_key)}`, target: '_blank', rel: 'noopener', text: 'See photo' }),
+        el('button', { class: 'btn sm danger', type: 'button', text: 'Delete', onclick: run(async () => {
+          if (!confirm('Delete this comment?')) return;
+          await api(`/api/admin/comments/${c.id}/delete`, 'POST', {});
+          await loadComments();
+        }) }))))
+      : [el('div', {}, el('span', { class: 'muted', text: `No comments yet. ${r.likes} like${r.likes === 1 ? '' : 's'} so far.` }))]));
+  }
+  // the events site's own photos (uploaded in events admin): shown here so nothing is out of sight
+  async function loadEventsPhotos() {
+    const r = await api('/api/admin/events-photos');
+    $('#galN_events').textContent = r.photos.length || '';
+    const album = new Map(r.albums.map((a) => [a.id, a.name]));
+    $('#galGrid').replaceChildren(...(r.photos.length ? r.photos.map((p) => el('div', { class: 'photo' },
+      el('a', { href: p.url, target: '_blank', rel: 'noopener', class: 'photo-img' }, el('img', { src: p.thumb || p.url, alt: p.caption || '', loading: 'lazy' })),
+      el('div', { class: 'photo-meta' },
+        el('span', { class: 'pill', text: album.get(p.album) || 'Album' }),
+        p.caption ? el('p', { class: 'small', text: p.caption }) : null,
+        el('span', { class: 'muted small', text: 'Manage in events admin → Gallery' }))))
+      : [el('p', { class: 'muted', text: 'No photos on the events site yet.' })]));
   }
   function renderGallery() {
     const { photos, counts, open } = galData;
@@ -1297,6 +1335,10 @@
     for (const p of waiting) await api(`/api/admin/photos/${p.id}`, 'POST', { status: 'approved' });
     toast(`Approved ${waiting.length}`);
     await loadGallery();
+  }));
+  $('#galCommentsOpen').addEventListener('change', run(async (e) => {
+    await api('/api/admin/comments-open', 'POST', { open: e.target.checked });
+    toast(e.target.checked ? 'Comments open' : 'Comments closed');
   }));
   $('#galOpen').addEventListener('change', run(async (e) => {
     await api('/api/admin/gallery', 'POST', { open: e.target.checked });
